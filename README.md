@@ -1,0 +1,2 @@
+# anylibs
+stdlib for C
