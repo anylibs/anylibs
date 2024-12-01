@@ -1,0 +1,12 @@
+BasedOnStyle: LLVM
+
+BreakBeforeBraces: Linux
+PointerAlignment: Left
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: Consecutive
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortBlocksOnASingleLine: Always
+AllowShortFunctionsOnASingleLine: None
+AlwaysBreakAfterReturnType: AllDefinitions
+BreakBeforeBinaryOperators: true
+BinPackParameters: false
