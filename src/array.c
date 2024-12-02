@@ -1,4 +1,5 @@
 /**
+ * @file array.c
  * @copyright (C) 2024-2025 Mohamed A. Elmeligy
  * MIT License
  *
@@ -38,22 +39,22 @@
 c_error_t
 c_array_init(size_t element_size, CArray* out_c_array)
 {
-  return c_array_create_with_capacity(element_size, 1U, out_c_array);
+  return c_array_init_with_capacity(element_size, 1U, out_c_array);
 }
 
 /**
- * @brief same as `c_array_create` but with allocating capacity
+ * @brief same as @ref c_array_init but with allocating capacity
  *        (NOTE: malloc_fn is a malloc like function)
  * @param[in] element_size
  * @param[in] capacity maximum number of elements to be allocated, minimum
  *                 capacity is 1
- * @param[out] out_c_array the result CArray object created
+ * @param[out] out_c_array the result CArray object initd
  * @return return error (any value but zero is treated as an error)
  */
 c_error_t
-c_array_create_with_capacity(size_t  element_size,
-                             size_t  capacity,
-                             CArray* out_c_array)
+c_array_init_with_capacity(size_t  element_size,
+                           size_t  capacity,
+                           CArray* out_c_array)
 {
   assert(element_size > 0 || capacity > 0);
 
@@ -107,8 +108,6 @@ c_array_set_len(CArray* self, size_t new_len)
   assert(new_len > 0);
 
   if (new_len > self->capacity) {
-
-    /// FIXME:
     c_error_t err = c_array_set_capacity(self, new_len);
     if (err != C_ERROR_none) return err;
   }
@@ -225,7 +224,7 @@ c_array_pop(CArray* self, void* out_element)
 }
 
 /**
- * @brief insert 1 element at @ref index
+ * @brief insert 1 element at @p index
  * @note this could reset new reallocated @ref CArray::data
  * @param[in] self pointer to self
  * @param[in] element a pointer the data of size @ref CArray::element_size

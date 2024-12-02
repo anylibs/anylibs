@@ -1,4 +1,5 @@
 /**
+ * @file array.c
  * @copyright (C) 2024-2025 Mohamed A. Elmeligy
  * MIT License
  *
@@ -21,7 +22,7 @@
 #include "error.h"
 
 typedef struct CArray {
-  void*  data;
+  void*  data;     ///< heap allocated data
   size_t len;      ///< current length, note: this unit based not bytes based
   size_t capacity; ///< maximum data that can be hold, note: this unit based
                    ///  not bytes based
@@ -30,9 +31,9 @@ typedef struct CArray {
 
 c_error_t c_array_init(size_t element_size, CArray* out_c_array);
 
-c_error_t c_array_create_with_capacity(size_t  element_size,
-                                       size_t  capacity,
-                                       CArray* out_c_array);
+c_error_t c_array_init_with_capacity(size_t  element_size,
+                                     size_t  capacity,
+                                     CArray* out_c_array);
 
 bool c_array_is_empty(CArray const* self);
 
