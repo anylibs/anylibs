@@ -22,11 +22,10 @@
 #include "error.h"
 
 typedef struct CArray {
-  void*  data;     ///< heap allocated data
-  size_t len;      ///< current length, note: this unit based not bytes based
-  size_t capacity; ///< maximum data that can be hold, note: this unit based
-                   ///  not bytes based
-  size_t element_size; ///< size of the unit
+  void*  data; ///< heap allocated data
+  size_t placeholder_1;
+  size_t placeholder_2;
+  size_t placeholder_3;
 } CArray;
 
 c_error_t c_array_init(size_t element_size, CArray* out_c_array);

@@ -112,11 +112,11 @@ UTEST_F(CArray, clone)
   int    err = c_array_clone(utest_fixture, true, &clone);
   EXPECT_EQ(err, 0);
 
-  EXPECT_EQ(clone.len, utest_fixture->len);
-  EXPECT_EQ(clone.capacity, utest_fixture->len);
-  EXPECT_EQ(clone.element_size, utest_fixture->element_size);
+  EXPECT_EQ(c_array_len(&clone), c_array_len(utest_fixture));
+  EXPECT_EQ(c_array_capacity(&clone), c_array_len(utest_fixture));
+  EXPECT_EQ(c_array_element_size(&clone), c_array_element_size(utest_fixture));
 
-  EXPECT_EQ(memcmp(utest_fixture->data, clone.data, clone.len), 0);
+  EXPECT_EQ(memcmp(utest_fixture->data, clone.data, c_array_len(&clone)), 0);
 
   c_array_deinit(&clone);
 }
@@ -276,8 +276,8 @@ UTEST(CArray, shrint_to_fit)
   err = c_array_shrink_to_fit(&array);
   EXPECT_EQ(err, 0);
 
-  EXPECT_EQ(array.capacity, 4U);
-  EXPECT_EQ(array.len, 4U);
+  EXPECT_EQ(c_array_capacity(&array), 4U);
+  EXPECT_EQ(c_array_len(&array), 4U);
 
   EXPECT_EQ(((int*)array.data)[0], 1);
   EXPECT_EQ(((int*)array.data)[1], 2);
@@ -313,7 +313,7 @@ UTEST(CArray, dedup)
   err = c_array_deduplicate(&array, cmp);
   EXPECT_EQ(err, 0);
 
-  EXPECT_EQ(array.len, 4U);
+  EXPECT_EQ(c_array_len(&array), 4U);
 
   EXPECT_EQ(((int*)array.data)[0], 1);
   EXPECT_EQ(((int*)array.data)[1], 2);
@@ -334,9 +334,9 @@ UTEST(CArray, fill)
   err = c_array_set_capacity(&array, 10);
   EXPECT_EQ(err, 0);
 
-  EXPECT_EQ(array.len, 0U);
+  EXPECT_EQ(c_array_len(&array), 0U);
   c_array_fill(&array, &(int){1});
-  EXPECT_EQ(array.len, 10U);
+  EXPECT_EQ(c_array_len(&array), 10U);
 
   EXPECT_EQ(memcmp(array.data, gt, arr_cap), 0);
 
@@ -351,10 +351,10 @@ UTEST(CArray, fill_with_repeat)
   int err = c_array_init_with_capacity(sizeof(int), arr_cap, true, &array);
   EXPECT_EQ(err, 0);
 
-  EXPECT_EQ(array.len, 0U);
+  EXPECT_EQ(c_array_len(&array), 0U);
   c_array_fill_with_repeat(&array, (int[]){1, 2, 3}, 3);
-  EXPECT_EQ(array.len, 9U);
-  EXPECT_EQ(array.capacity, 10U);
+  EXPECT_EQ(c_array_len(&array), 9U);
+  EXPECT_EQ(c_array_capacity(&array), 10U);
 
   EXPECT_EQ(memcmp(array.data, gt, arr_cap), 0);
 
