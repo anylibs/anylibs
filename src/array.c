@@ -30,30 +30,28 @@
 #pragma warning(disable : 4996) // disable warning about unsafe functions
 #endif
 
-/**
- * @brief intialize a new array object
- * @param[in] element_size
- * @param[out] out_c_array initialize CArray object
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief intialize a new array object
+/// @param[in] element_size
+/// @param[out] out_c_array the result CArray object initiated
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_init(size_t element_size, CArray* out_c_array)
 {
-  return c_array_init_with_capacity(element_size, 1U, out_c_array);
+  return c_array_init_with_capacity(element_size, 1U, false, out_c_array);
 }
 
-/**
- * @brief same as @ref c_array_init but with allocating capacity
- *        (NOTE: malloc_fn is a malloc like function)
- * @param[in] element_size
- * @param[in] capacity maximum number of elements to be allocated, minimum
- *                 capacity is 1
- * @param[out] out_c_array the result CArray object initd
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief same as @ref c_array_init but with allocating capacity
+///        (NOTE: malloc_fn is a malloc like function)
+/// @param[in] element_size
+/// @param[in] capacity maximum number of elements to be allocated, minimum
+///                     capacity is 1
+/// @param[in] zeroed_out should zero the memory or not
+/// @param[out] out_c_array the result CArray object initiated
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_init_with_capacity(size_t  element_size,
                            size_t  capacity,
+                           bool    zeroed_out,
                            CArray* out_c_array)
 {
   assert(element_size > 0 || capacity > 0);
@@ -67,40 +65,89 @@ c_array_init_with_capacity(size_t  element_size,
   out_c_array->capacity     = capacity;
   out_c_array->element_size = element_size;
 
+  if (zeroed_out)
+    memset(out_c_array->data, 0,
+           out_c_array->capacity * out_c_array->element_size);
+
   return C_ERROR_none;
 }
 
-/**
- * @brief check wether the array is empty
- * @param[in] self
- * @return bool
- */
+/// @brief initialize @ref CArray from raw pointer
+/// @note this will not allocate memory for the data
+/// @param[in] data
+/// @param[in] data_len this is in @ref CArray::element_size not bytes
+/// @param[in] element_size
+/// @param[out] out_c_array the result CArray object initiated
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_init_from_raw(void*   data,
+                      size_t  data_len,
+                      size_t  element_size,
+                      CArray* out_c_array)
+{
+  assert(element_size > 0);
+  assert(data && data_len > 0);
+
+  if (!out_c_array) return C_ERROR_none;
+
+  *out_c_array              = (CArray){0};
+  out_c_array->data         = data;
+  out_c_array->len          = data_len;
+  out_c_array->element_size = element_size;
+
+  return C_ERROR_none;
+}
+
+/// @brief clone @ref CArray
+/// @note this will make a deep copy
+/// @param[in] self
+/// @param[in] should_shrink_clone
+/// @param[out] out_c_array
+/// @return
+c_error_t
+c_array_clone(CArray const* self, bool should_shrink_clone, CArray* out_c_array)
+{
+  assert(self && self->data);
+  if (!out_c_array) return C_ERROR_none;
+
+  c_error_t err = c_array_init_with_capacity(
+      self->element_size, should_shrink_clone ? self->len : self->capacity,
+      false, out_c_array);
+  if (err) return err;
+
+  memcpy(out_c_array->data, self->data, self->len);
+  out_c_array->len = self->len;
+
+  return C_ERROR_none;
+}
+
+/// @brief check wether the array is empty
+/// @param[in] self
+/// @return bool
 bool
 c_array_is_empty(CArray const* self)
 {
+  assert(self);
   return self->len > 0;
 }
 
-/**
- * @brief get array length
- * @param[in] self
- * @return @ref CArray::len
- */
+/// @brief get array length
+/// @param[in] self
+/// @return @ref CArray::len
 size_t
 c_array_len(CArray const* self)
 {
+  assert(self);
   return self->len;
 }
 
-/**
- * @brief set array length
- *        this is useful if you want
- *        to manipulate the data by yourself
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self
- * @param[in] new_len
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief set array length
+///        this is useful if you want
+///        to manipulate the data by yourself
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self
+/// @param[in] new_len
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_set_len(CArray* self, size_t new_len)
 {
@@ -116,28 +163,34 @@ c_array_set_len(CArray* self, size_t new_len)
   return C_ERROR_none;
 }
 
-/**
- * @brief get array capacity
- *        this will return the capacity in @ref CArray::element_size wise
- *
- *        return 'capacity = 10' which means
- *        we can have up to '10 * element_size' bytes
- * @param[in] self
- * @return @ref CArray::capacity
- */
+/// @brief get array capacity
+///        this will return the capacity in @ref CArray::element_size wise
+///        return 'capacity = 10' which means
+///        we can have up to '10 * element_size' bytes
+/// @param[in] self
+/// @return @ref CArray::capacity
 size_t
 c_array_capacity(CArray const* self)
 {
+  assert(self);
   return self->capacity;
 }
 
-/**
- * @brief set capacity
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self address of self
- * @param[in] new_capacity
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief return the remaining empty space
+/// @param[in] self
+/// @return the remaining space
+size_t
+c_array_spare_capacity(CArray const* self)
+{
+  assert(self);
+  return self->capacity - self->len;
+}
+
+/// @brief set capacity
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self address of self
+/// @param[in] new_capacity
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_set_capacity(CArray* self, size_t new_capacity)
 {
@@ -153,28 +206,213 @@ c_array_set_capacity(CArray* self, size_t new_capacity)
   return C_ERROR_none;
 }
 
-/**
- * @brief get elemet_size in bytes
- * @param[in] self
- * @return @ref CArray::element_size
- */
+/// @brief get elemet_size in bytes
+/// @param[in] self
+/// @return @ref CArray::element_size
 size_t
 c_array_element_size(CArray* self)
 {
   return self->element_size;
 }
 
-/**
- * @brief push one element at the end
- *        if you want to push literals (example: 3, 5 or 10 ...)
- *        c_array_push(array, &(int){3});
- * @note this could reset new reallocated @ref CArray::data
- * @note this will COPY @p element
- * @param[in] self pointer to self
- * @param[in] element a pointer the data of size @ref CArray::element_size
- *                    that you want to push back
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief make the @ref CArray::capacity equals @ref CArray::len
+/// @param[in] self
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_shrink_to_fit(CArray* self)
+{
+  return c_array_set_capacity(self, self->len);
+}
+
+/// @brief search for @p element
+/// @param[in] self
+/// @param[in] element
+/// @param[in] cmp this is similar to strcmp
+/// @param[out] out_index
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_search(CArray const* self,
+               void*         element,
+               int           cmp(void const*, void const*),
+               size_t*       out_index)
+{
+  assert(self && self->data);
+  if (!out_index || !cmp) return C_ERROR_none;
+
+  for (size_t iii = 0; iii < self->len; iii++) {
+    if (cmp(element, (char*)self->data + (iii * self->element_size)) == 0) {
+      *out_index = iii;
+      return C_ERROR_none;
+    }
+  }
+
+  return C_ERROR_not_found;
+}
+
+/// @brief search for @p element using binary search tree
+/// @note  If @ref CArray::data is not sorted, the returned result is
+///        unspecified and meaningless
+/// @param[in] self
+/// @param[in] element
+/// @param[in] cmp this is similar to strcmp
+/// @param[out] out_index
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_binary_search(CArray const* self,
+                      void const*   element,
+                      int           cmp(void const*, void const*),
+                      size_t*       out_index)
+{
+  assert(self && self->data);
+  if (!out_index || !cmp) return C_ERROR_none;
+
+  void* out_element
+      = bsearch(element, self->data, self->len, self->element_size, cmp);
+
+  if (out_element) {
+    *out_index = ((char*)out_element - (char*)self->data) / self->element_size;
+    return C_ERROR_none;
+  } else {
+    return C_ERROR_not_found;
+  }
+}
+
+/// @brief check if @p elements is the same as the start elements
+///        of @ref CArray::data
+/// @param[in] self
+/// @param[in] elements
+/// @param[in] elements_len
+/// @param[in] cmp this is similar to strcmp
+/// @return
+bool
+c_array_starts_with(CArray const* self,
+                    void*         elements,
+                    size_t        elements_len,
+                    int           cmp(void const*, void const*))
+{
+  assert(self && self->data);
+  assert(elements && elements_len > 0);
+
+  if (!cmp) return false;
+  if (self->len < elements_len) return false;
+
+  for (size_t iii = 0; iii < elements_len; iii++) {
+    if (cmp((char*)self->data + (iii * self->element_size),
+            (char*)elements + (iii * self->element_size))
+        != 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/// @brief check if @p elements is the same as the end elements
+///        of @ref CArray::data
+/// @param[in] self
+/// @param[in] elements
+/// @param[in] elements_len
+/// @param[in] cmp this is similar to strcmp
+/// @return
+bool
+c_array_ends_with(CArray const* self,
+                  void*         elements,
+                  size_t        elements_len,
+                  int           cmp(void const*, void const*))
+{
+  assert(self && self->data);
+  assert(elements && elements_len > 0);
+
+  if (!cmp) return false;
+  if (self->len < elements_len) return false;
+
+  for (size_t iii = self->len - elements_len, jjj = 0; iii < self->len;
+       iii++, jjj++) {
+    if (cmp((char*)self->data + (iii * self->element_size),
+            (char*)elements + (jjj * self->element_size))
+        != 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/// @brief sort
+/// @param[in] self
+/// @param[in] cmp this is similar to strcmp
+void
+c_array_sort(CArray* self, int cmp(void const*, void const*))
+{
+  assert(self && self->data);
+  if (!cmp) return;
+
+  qsort(self->data, self->len, self->element_size, cmp);
+}
+
+/// @brief check if sorted or not (in ascending order)
+/// @param[in] self
+/// @return return if sorted or not
+bool
+c_array_is_sorted(CArray* self, int cmp(void const*, void const*))
+{
+  assert(self && self->data);
+
+  for (size_t iii = 1; iii < self->len; ++iii) {
+    if (cmp((char*)self->data + (iii * self->element_size),
+            (char*)self->data + ((iii - 1) * self->element_size))
+        < 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/// @brief check if sorted or not (in descending order)
+/// @param[in] self
+/// @return return if sorted or not
+bool
+c_array_is_sorted_inv(CArray* self, int cmp(void const*, void const*))
+{
+  assert(self && self->data);
+
+  for (size_t iii = 1; iii < self->len; ++iii) {
+    if (cmp((char*)self->data + (iii * self->element_size),
+            (char*)self->data + ((iii - 1) * self->element_size))
+        > 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/// @brief get an @p element at @p index
+/// @param[in] self
+/// @param[in] index
+/// @param[out] out_element
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_get(CArray const* self, size_t index, void** out_element)
+{
+  assert(self && self->data);
+  if (!out_element) return C_ERROR_none;
+  if (index > self->len) return C_ERROR_wrong_index;
+
+  *out_element = (char*)self->data + (index * self->element_size);
+  return C_ERROR_none;
+}
+
+/// @brief push one element at the end
+///        if you want to push literals (example: 3, 5 or 10 ...)
+///        c_array_push(array, &(int){3});
+/// @note this could reset new reallocated @ref CArray::data
+/// @note this will COPY @p element
+/// @param[in] self pointer to self
+/// @param[in] element a pointer the data of size @ref CArray::element_size
+///                    that you want to push back
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_push(CArray* self, void const* element)
 {
@@ -193,13 +431,24 @@ c_array_push(CArray* self, void const* element)
   return C_ERROR_none;
 }
 
-/**
- * @brief pop one element from the end
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self
- * @param[out] out_element the returned result
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief push elements at the end of @ref CArray
+/// @note this could reset new reallocated @ref CArray::data
+/// @note this will COPY @p element
+/// @param[in] self
+/// @param[in] elements
+/// @param[in] elements_len
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_push_range(CArray* self, void const* elements, size_t elements_len)
+{
+  return c_array_insert_range(self, self->len, elements, elements_len);
+}
+
+/// @brief pop one element from the end
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self
+/// @param[out] out_element the returned result
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_pop(CArray* self, void* out_element)
 {
@@ -223,15 +472,13 @@ c_array_pop(CArray* self, void* out_element)
   return err;
 }
 
-/**
- * @brief insert 1 element at @p index
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self pointer to self
- * @param[in] element a pointer the data of size @ref CArray::element_size
- *                    that you want to push back
- * @param[in] index
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief insert 1 element at @p index
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self pointer to self
+/// @param[in] element a pointer the data of size @ref CArray::element_size
+///                    that you want to push back
+/// @param[in] index
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_insert(CArray* self, void const* element, size_t index)
 {
@@ -257,15 +504,13 @@ c_array_insert(CArray* self, void const* element, size_t index)
   return C_ERROR_none;
 }
 
-/**
- * @brief insert multiple elements at index
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self
- * @param[in] index
- * @param[in] data
- * @param[in] data_len
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief insert multiple elements at index
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self
+/// @param[in] index
+/// @param[in] data
+/// @param[in] data_len
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_insert_range(CArray*     self,
                      size_t      index,
@@ -276,7 +521,7 @@ c_array_insert_range(CArray*     self,
   assert(data);
   assert(data_len > 0);
 
-  if (self->len <= index) return C_ERROR_wrong_index;
+  if (self->len < index) return C_ERROR_wrong_index;
 
   while ((self->len + data_len) > self->capacity) {
     c_error_t err = c_array_set_capacity(self, self->capacity * 2);
@@ -297,13 +542,133 @@ c_array_insert_range(CArray*     self,
   return C_ERROR_none;
 }
 
-/**
- * @brief remove element from CArray
- * @note this could reset new reallocated @ref CArray::data
- * @param[in] self
- * @param[in] index index to be removed
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief fill the whole @ref CArray::capacity with @p data
+/// @param[in] self
+/// @param[in] data
+void
+c_array_fill(CArray* self, void* data)
+{
+  assert(self && self->data);
+  if (!data) return;
+
+  for (size_t iii = 0; iii < self->capacity; iii++) {
+    memcpy((char*)self->data + (iii * self->element_size), data,
+           self->element_size);
+  }
+  self->len = self->capacity;
+}
+
+/// @brief concatenate arr2 @ref CArray::data to arr1 @ref CArray::data
+/// @param[in] arr1
+/// @param[in] arr2
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_concatenate(CArray* arr1, CArray const* arr2)
+{
+  assert(arr1 && arr1->data);
+  assert(arr2 && arr2->data);
+
+  c_error_t err = C_ERROR_none;
+
+  if (arr1->element_size != arr2->element_size)
+    return C_ERROR_wrong_element_size;
+
+  if (arr1->capacity < (arr1->len + arr2->len)) {
+    err = c_array_set_capacity(arr1, arr1->len + arr2->len);
+    if (err) return err;
+  }
+
+  memcpy((char*)arr1->data + (arr1->len * arr1->element_size), arr2->data,
+         arr2->len * arr2->element_size);
+
+  arr1->len += arr2->len;
+
+  return err;
+}
+
+/// @brief fill @ref CArray::data with repeated @p data
+/// @param[in] self
+/// @param[in] data
+/// @param[in] data_len this is in @ref CArray::element_size not bytes
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_fill_with_repeat(CArray* self, void* data, size_t data_len)
+{
+  assert(self && self->data);
+  if (data_len > self->capacity) return C_ERROR_wrong_len;
+
+  size_t const number_of_repeats = self->capacity / data_len;
+  size_t const repeat_size       = data_len * self->element_size;
+  for (size_t iii = 0; iii < number_of_repeats; ++iii) {
+    memcpy((char*)self->data + (iii * (repeat_size)), data,
+           data_len * self->element_size);
+  }
+
+  self->len = number_of_repeats * data_len;
+
+  return C_ERROR_none;
+}
+
+/// @brief rotate @p elements_count to the right
+/// @param[in] self
+/// @param[in] elements_count
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_rotate_right(CArray* self, size_t elements_count)
+{
+  assert(self && self->data);
+  if ((elements_count == 0) || (elements_count > self->len))
+    return C_ERROR_none;
+
+  void* tmp = malloc(elements_count * self->element_size);
+  if (!tmp) return C_ERROR_mem_allocation;
+
+  memcpy(tmp,
+         (char*)self->data
+             + ((self->len - elements_count) * self->element_size),
+         elements_count * self->element_size);
+
+  memmove((char*)self->data + (elements_count * self->element_size), self->data,
+          elements_count * self->element_size);
+  memcpy(self->data, tmp, elements_count * self->element_size);
+
+  free(tmp);
+
+  return C_ERROR_none;
+}
+
+/// @brief rotate @p elements_count to the left
+/// @param[in] self
+/// @param[in] elements_count
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_rotate_left(CArray* self, size_t elements_count)
+{
+  assert(self && self->data);
+  if ((elements_count == 0) || (elements_count > self->len))
+    return C_ERROR_none;
+
+  void* tmp = malloc(elements_count * self->element_size);
+  if (!tmp) return C_ERROR_mem_allocation;
+
+  memcpy(tmp, self->data, elements_count * self->element_size);
+
+  memmove(self->data, (char*)self->data + (elements_count * self->element_size),
+          elements_count * self->element_size);
+  memcpy((char*)self->data
+             + ((self->len - elements_count) * self->element_size),
+         tmp, elements_count * self->element_size);
+
+  free(tmp);
+
+  return C_ERROR_none;
+}
+
+/// @brief remove element from CArray
+/// @note this could reset new reallocated @ref CArray::data
+/// @param[in] self
+/// @param[in] index index to be removed
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_remove(CArray* self, size_t index)
 {
@@ -326,15 +691,13 @@ c_array_remove(CArray* self, size_t index)
   return err;
 }
 
-/**
- * @brief remove a range of elements from CArray starting from @p start_index
- *        with size @p range_size
- * @note this could reset new reallocated @p CArray::data
- * @param[in] self
- * @param[in] start_index
- * @param[in] range_size range length
- * @return return error (any value but zero is treated as an error)
- */
+/// @brief remove a range of elements from CArray starting from @p start_index
+///        with size @p range_size
+/// @note this could reset new reallocated @p CArray::data
+/// @param[in] self
+/// @param[in] start_index
+/// @param[in] range_size range length
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
 {
@@ -363,17 +726,129 @@ c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
   return err;
 }
 
-/**
- * @brief deinit an array object
- *        this will free any allocated memory and set the object data to zero
- * @note this could handle self as NULL
- * @param[in] self
- */
+/// @brief remove duplicated elements in place
+/// @note this is a very costy function
+/// @param[in] self
+/// @param[in] cmp this is similar to strcmp
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_deduplicate(CArray* self, int cmp(void const*, void const*))
+{
+  assert(self && self->data);
+
+  if (!cmp) return C_ERROR_none;
+
+  for (size_t iii = 0; iii < self->len; ++iii) {
+    for (size_t jjj = iii + 1; jjj < self->len; ++jjj) {
+      if (cmp((char*)self->data + (self->element_size * iii),
+              (char*)self->data + (self->element_size * jjj))
+          == 0) {
+        memmove((char*)self->data + (jjj * self->element_size),
+                (char*)self->data + ((jjj + 1) * self->element_size),
+                (self->len - jjj + 1) * self->element_size);
+        self->len--;
+        jjj--;
+      }
+    }
+  }
+
+  return C_ERROR_none;
+}
+
+/// @brief get a slice from @ref CArray
+/// @note this is only reference to the data
+///       so @ref CArray::capacity will be zero
+/// @param[in] self
+/// @param[in] start_index
+/// @param[in] range if range is bigger than @ref CArray::len,
+///                  @ref CArray::len will be the returned range
+/// @param[out] out_slice
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_array_slice(CArray const* self,
+              size_t        start_index,
+              size_t        range,
+              CArray*       out_slice)
+{
+  assert(self && self->data);
+
+  if (start_index > self->len) return C_ERROR_wrong_index;
+  range = (self->len - start_index) < range ? self->len : range;
+
+  *out_slice
+      = (CArray){.data = (char*)self->data + (start_index * self->element_size),
+                 .len  = range,
+                 .element_size = self->element_size};
+
+  return C_ERROR_none;
+}
+
+/// @brief an iterator to loop over the @ref CArray::data
+/// @param[in] self
+/// @param[in] index pointer to a counter index, it will keep count till @ref
+///              CArray::len
+/// @param[in] element a pointer to the current element
+/// @return bool indicating if we reached the end of the array
+bool
+c_array_iter(CArray* self, size_t* index, void** element)
+{
+  assert(self && self->data);
+  if (!index || !element) return false;
+
+  if (*index < self->len) {
+    *element = (char*)self->data + (*index * self->element_size);
+    *index += 1;
+    return true;
+  }
+
+  return false;
+}
+
+/// @brief reverse the @ref CArray::data in place
+/// @param[in] self
+c_error_t
+c_array_reverse(CArray* self)
+{
+  assert(self && self->data);
+
+  char* start = self->data;
+  char* end   = (char*)self->data + ((self->len - 1) * self->element_size);
+
+  void* tmp = malloc(self->element_size);
+  if (!tmp) return C_ERROR_mem_allocation;
+
+  while (end > start) {
+    memcpy(tmp, start, self->element_size);
+    memcpy(start, end, self->element_size);
+    memcpy(end, tmp, self->element_size);
+
+    start += self->element_size;
+    end -= self->element_size;
+  }
+
+  free(tmp);
+
+  return C_ERROR_none;
+}
+
+/// @brief clear the @ref CArray without changing the capacity
+/// @param[in] self
+void
+c_array_clear(CArray* self)
+{
+  assert(self && self->data);
+  self->len = 0;
+}
+
+/// @brief deinit an array object
+///        this will free any allocated memory and set the object data to zero
+/// @note this could handle self as NULL
+/// @param[in] self
 void
 c_array_deinit(CArray* self)
 {
   if (self && self->data) {
-    free(self->data);
+    if (self->capacity) free(self->data);
     *self = (CArray){0};
   }
 }

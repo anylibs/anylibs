@@ -40,9 +40,10 @@ else()
     add_link_options($<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>)
 endif()
 
-if (${ENABLE_TESTING})
+if (ENABLE_TESTING)
+    message("-- testing has been enabled")
     enable_testing()
-    add_subdirectory(tests)
+    add_subdirectory(test)
 endif()
 
 add_library(${PROJECT_NAME} INTERFACE)
