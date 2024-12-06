@@ -22,23 +22,19 @@
 #include "error.h"
 
 typedef struct CArray {
-  void*  data;     ///< heap allocated data
-  size_t len;      ///< current length, note: this unit based not bytes based
-  size_t capacity; ///< maximum data that can be hold, note: this unit based
-                   ///  not bytes based
-  size_t element_size; ///< size of the unit
+  void* data; ///< heap allocated data
 } CArray;
 
-c_error_t c_array_init(size_t element_size, CArray* out_c_array);
+c_error_t c_array_create(size_t element_size, CArray** out_c_array);
 
-c_error_t c_array_init_with_capacity(size_t  element_size,
-                                     size_t  capacity,
-                                     bool    zeroed_out,
-                                     CArray* out_c_array);
+c_error_t c_array_create_with_capacity(size_t   element_size,
+                                       size_t   capacity,
+                                       bool     zeroed_out,
+                                       CArray** out_c_array);
 
 c_error_t c_array_clone(CArray const* self,
                         bool          should_shrink_clone,
-                        CArray*       out_c_array);
+                        CArray**      out_c_array);
 
 bool c_array_is_empty(CArray const* self);
 
@@ -118,7 +114,7 @@ c_error_t c_array_deduplicate(CArray* self, int cmp(void const*, void const*));
 c_error_t c_array_slice(CArray const* self,
                         size_t        start_index,
                         size_t        range,
-                        CArray*       out_slice);
+                        CArray**      out_slice);
 
 bool c_array_iter(CArray* self, size_t* index, void** element);
 
@@ -126,5 +122,5 @@ c_error_t c_array_reverse(CArray* self);
 
 void c_array_clear(CArray* self);
 
-void c_array_deinit(CArray* self);
+void c_array_destroy(CArray** self);
 #endif // ANYLIBS_ARRAY_H

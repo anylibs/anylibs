@@ -30,18 +30,28 @@
 #pragma warning(disable : 4996) // disable warning about unsafe functions
 #endif
 
+#define TO_IMPL(arr) ((CArrayImpl*)(arr))
+#define FROM_IMPL(impl) ((CArray*)(impl))
+
+typedef struct CArrayImpl {
+  char*  data;     ///< heap allocated data
+  size_t len;      ///< current length, note: this unit based not bytes based
+  size_t capacity; ///< maximum data that can be hold, note: this unit based
+                   ///  not bytes based
+  size_t element_size; ///< size of the unit
+} CArrayImpl;
+
 /// @brief intialize a new array object
 /// @param[in] element_size
 /// @param[out] out_c_array the result CArray object initiated
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_init(size_t element_size, CArray* out_c_array)
+c_array_create(size_t element_size, CArray** out_c_array)
 {
-  return c_array_init_with_capacity(element_size, 1U, false, out_c_array);
+  return c_array_create_with_capacity(element_size, 1U, false, out_c_array);
 }
 
-/// @brief same as @ref c_array_init but with allocating capacity
-///        (NOTE: malloc_fn is a malloc like function)
+/// @brief same as @ref c_array_create but with allocating capacity
 /// @param[in] element_size
 /// @param[in] capacity maximum number of elements to be allocated, minimum
 ///                     capacity is 1
@@ -49,27 +59,36 @@ c_array_init(size_t element_size, CArray* out_c_array)
 /// @param[out] out_c_array the result CArray object initiated
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_init_with_capacity(size_t  element_size,
-                           size_t  capacity,
-                           bool    zeroed_out,
-                           CArray* out_c_array)
+c_array_create_with_capacity(size_t   element_size,
+                             size_t   capacity,
+                             bool     zeroed_out,
+                             CArray** out_c_array)
 {
   assert(element_size > 0 || capacity > 0);
 
   if (!out_c_array) return C_ERROR_none;
 
-  *out_c_array      = (CArray){0};
-  out_c_array->data = malloc(capacity * element_size);
-  if (!out_c_array->data) return C_ERROR_mem_allocation;
+  CArrayImpl* impl = malloc(sizeof(*impl));
+  if (!impl) goto ERROR_ALLOC;
+  impl->data = malloc(capacity * element_size);
+  if (!impl) goto ERROR_ALLOC;
 
-  out_c_array->capacity     = capacity;
-  out_c_array->element_size = element_size;
+  impl->capacity     = capacity;
+  impl->element_size = element_size;
+  impl->len          = 0;
 
-  if (zeroed_out)
-    memset(out_c_array->data, 0,
-           out_c_array->capacity * out_c_array->element_size);
+  if (zeroed_out) memset(impl->data, 0, impl->capacity * impl->element_size);
+
+  *out_c_array = FROM_IMPL(impl);
 
   return C_ERROR_none;
+
+ERROR_ALLOC:
+  if (impl) {
+    free(impl);
+    if (impl->data) free(impl->data);
+  }
+  return C_ERROR_mem_allocation;
 }
 
 /// @brief initialize @ref CArray from raw pointer
@@ -80,22 +99,34 @@ c_array_init_with_capacity(size_t  element_size,
 /// @param[out] out_c_array the result CArray object initiated
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_init_from_raw(void*   data,
-                      size_t  data_len,
-                      size_t  element_size,
-                      CArray* out_c_array)
+c_array_create_from_raw(void*    data,
+                        size_t   data_len,
+                        size_t   element_size,
+                        CArray** out_c_array)
 {
   assert(element_size > 0);
   assert(data && data_len > 0);
 
   if (!out_c_array) return C_ERROR_none;
 
-  *out_c_array              = (CArray){0};
-  out_c_array->data         = data;
-  out_c_array->len          = data_len;
-  out_c_array->element_size = element_size;
+  CArrayImpl* impl = malloc(sizeof(*impl));
+  if (!impl) goto ERROR_ALLOC;
+  impl->data = data;
+
+  impl->capacity     = 0;
+  impl->element_size = element_size;
+  impl->len          = 0;
+
+  *out_c_array = FROM_IMPL(impl);
 
   return C_ERROR_none;
+
+ERROR_ALLOC:
+  if (impl) {
+    free(impl);
+    if (impl->data) free(impl->data);
+  }
+  return C_ERROR_mem_allocation;
 }
 
 /// @brief clone @ref CArray
@@ -105,18 +136,21 @@ c_array_init_from_raw(void*   data,
 /// @param[out] out_c_array
 /// @return
 c_error_t
-c_array_clone(CArray const* self, bool should_shrink_clone, CArray* out_c_array)
+c_array_clone(CArray const* self,
+              bool          should_shrink_clone,
+              CArray**      out_c_array)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_c_array) return C_ERROR_none;
 
-  c_error_t err = c_array_init_with_capacity(
-      self->element_size, should_shrink_clone ? self->len : self->capacity,
-      false, out_c_array);
+  c_error_t err = c_array_create_with_capacity(
+      TO_IMPL(self)->element_size,
+      should_shrink_clone ? TO_IMPL(self)->len : TO_IMPL(self)->capacity, false,
+      out_c_array);
   if (err) return err;
 
-  memcpy(out_c_array->data, self->data, self->len);
-  out_c_array->len = self->len;
+  memcpy(TO_IMPL(*out_c_array)->data, TO_IMPL(self)->data, TO_IMPL(self)->len);
+  TO_IMPL(*out_c_array)->len = TO_IMPL(self)->len;
 
   return C_ERROR_none;
 }
@@ -128,7 +162,7 @@ bool
 c_array_is_empty(CArray const* self)
 {
   assert(self);
-  return self->len > 0;
+  return TO_IMPL(self)->len > 0;
 }
 
 /// @brief get array length
@@ -138,7 +172,7 @@ size_t
 c_array_len(CArray const* self)
 {
   assert(self);
-  return self->len;
+  return TO_IMPL(self)->len;
 }
 
 /// @brief set array length
@@ -151,15 +185,15 @@ c_array_len(CArray const* self)
 c_error_t
 c_array_set_len(CArray* self, size_t new_len)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(new_len > 0);
 
-  if (new_len > self->capacity) {
+  if (new_len > TO_IMPL(self)->capacity) {
     c_error_t err = c_array_set_capacity(self, new_len);
     if (err != C_ERROR_none) return err;
   }
 
-  self->len = new_len;
+  TO_IMPL(self)->len = new_len;
   return C_ERROR_none;
 }
 
@@ -173,7 +207,7 @@ size_t
 c_array_capacity(CArray const* self)
 {
   assert(self);
-  return self->capacity;
+  return TO_IMPL(self)->capacity;
 }
 
 /// @brief return the remaining empty space
@@ -183,7 +217,7 @@ size_t
 c_array_spare_capacity(CArray const* self)
 {
   assert(self);
-  return self->capacity - self->len;
+  return TO_IMPL(self)->capacity - TO_IMPL(self)->len;
 }
 
 /// @brief set capacity
@@ -194,14 +228,14 @@ c_array_spare_capacity(CArray const* self)
 c_error_t
 c_array_set_capacity(CArray* self, size_t new_capacity)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(new_capacity > 0);
 
-  void* reallocated_data
-      = realloc(self->data, (new_capacity * self->element_size));
+  void* reallocated_data = realloc(
+      TO_IMPL(self)->data, (new_capacity * TO_IMPL(self)->element_size));
   if (!reallocated_data) return C_ERROR_mem_allocation;
-  self->data     = reallocated_data;
-  self->capacity = new_capacity;
+  TO_IMPL(self)->data     = reallocated_data;
+  TO_IMPL(self)->capacity = new_capacity;
 
   return C_ERROR_none;
 }
@@ -212,7 +246,7 @@ c_array_set_capacity(CArray* self, size_t new_capacity)
 size_t
 c_array_element_size(CArray* self)
 {
-  return self->element_size;
+  return TO_IMPL(self)->element_size;
 }
 
 /// @brief make the @ref CArray::capacity equals @ref CArray::len
@@ -221,7 +255,7 @@ c_array_element_size(CArray* self)
 c_error_t
 c_array_shrink_to_fit(CArray* self)
 {
-  return c_array_set_capacity(self, self->len);
+  return c_array_set_capacity(self, TO_IMPL(self)->len);
 }
 
 /// @brief search for @p element
@@ -236,11 +270,13 @@ c_array_search(CArray const* self,
                int           cmp(void const*, void const*),
                size_t*       out_index)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
 
-  for (size_t iii = 0; iii < self->len; iii++) {
-    if (cmp(element, (char*)self->data + (iii * self->element_size)) == 0) {
+  for (size_t iii = 0; iii < TO_IMPL(self)->len; iii++) {
+    if (cmp(element,
+            (char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size))
+        == 0) {
       *out_index = iii;
       return C_ERROR_none;
     }
@@ -263,14 +299,15 @@ c_array_binary_search(CArray const* self,
                       int           cmp(void const*, void const*),
                       size_t*       out_index)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
 
-  void* out_element
-      = bsearch(element, self->data, self->len, self->element_size, cmp);
+  void* out_element = bsearch(element, TO_IMPL(self)->data, TO_IMPL(self)->len,
+                              TO_IMPL(self)->element_size, cmp);
 
   if (out_element) {
-    *out_index = ((char*)out_element - (char*)self->data) / self->element_size;
+    *out_index = ((char*)out_element - (char*)TO_IMPL(self)->data)
+                 / TO_IMPL(self)->element_size;
     return C_ERROR_none;
   } else {
     return C_ERROR_not_found;
@@ -290,15 +327,15 @@ c_array_starts_with(CArray const* self,
                     size_t        elements_len,
                     int           cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
   if (!cmp) return false;
-  if (self->len < elements_len) return false;
+  if (TO_IMPL(self)->len < elements_len) return false;
 
   for (size_t iii = 0; iii < elements_len; iii++) {
-    if (cmp((char*)self->data + (iii * self->element_size),
-            (char*)elements + (iii * self->element_size))
+    if (cmp((char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size),
+            (char*)elements + (iii * TO_IMPL(self)->element_size))
         != 0) {
       return false;
     }
@@ -320,16 +357,16 @@ c_array_ends_with(CArray const* self,
                   size_t        elements_len,
                   int           cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
   if (!cmp) return false;
-  if (self->len < elements_len) return false;
+  if (TO_IMPL(self)->len < elements_len) return false;
 
-  for (size_t iii = self->len - elements_len, jjj = 0; iii < self->len;
-       iii++, jjj++) {
-    if (cmp((char*)self->data + (iii * self->element_size),
-            (char*)elements + (jjj * self->element_size))
+  for (size_t iii = TO_IMPL(self)->len - elements_len, jjj = 0;
+       iii < TO_IMPL(self)->len; iii++, jjj++) {
+    if (cmp((char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size),
+            (char*)elements + (jjj * TO_IMPL(self)->element_size))
         != 0) {
       return false;
     }
@@ -344,10 +381,11 @@ c_array_ends_with(CArray const* self,
 void
 c_array_sort(CArray* self, int cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!cmp) return;
 
-  qsort(self->data, self->len, self->element_size, cmp);
+  qsort(TO_IMPL(self)->data, TO_IMPL(self)->len, TO_IMPL(self)->element_size,
+        cmp);
 }
 
 /// @brief check if sorted or not (in ascending order)
@@ -356,11 +394,12 @@ c_array_sort(CArray* self, int cmp(void const*, void const*))
 bool
 c_array_is_sorted(CArray* self, int cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  for (size_t iii = 1; iii < self->len; ++iii) {
-    if (cmp((char*)self->data + (iii * self->element_size),
-            (char*)self->data + ((iii - 1) * self->element_size))
+  for (size_t iii = 1; iii < TO_IMPL(self)->len; ++iii) {
+    if (cmp((char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size),
+            (char*)TO_IMPL(self)->data
+                + ((iii - 1) * TO_IMPL(self)->element_size))
         < 0) {
       return false;
     }
@@ -375,11 +414,12 @@ c_array_is_sorted(CArray* self, int cmp(void const*, void const*))
 bool
 c_array_is_sorted_inv(CArray* self, int cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  for (size_t iii = 1; iii < self->len; ++iii) {
-    if (cmp((char*)self->data + (iii * self->element_size),
-            (char*)self->data + ((iii - 1) * self->element_size))
+  for (size_t iii = 1; iii < TO_IMPL(self)->len; ++iii) {
+    if (cmp((char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size),
+            (char*)TO_IMPL(self)->data
+                + ((iii - 1) * TO_IMPL(self)->element_size))
         > 0) {
       return false;
     }
@@ -396,11 +436,12 @@ c_array_is_sorted_inv(CArray* self, int cmp(void const*, void const*))
 c_error_t
 c_array_get(CArray const* self, size_t index, void** out_element)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_element) return C_ERROR_none;
-  if (index > self->len) return C_ERROR_wrong_index;
+  if (index > TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
-  *out_element = (char*)self->data + (index * self->element_size);
+  *out_element
+      = (char*)TO_IMPL(self)->data + (index * TO_IMPL(self)->element_size);
   return C_ERROR_none;
 }
 
@@ -416,17 +457,18 @@ c_array_get(CArray const* self, size_t index, void** out_element)
 c_error_t
 c_array_push(CArray* self, void const* element)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(element);
 
-  if (self->len >= self->capacity) {
-    c_error_t err = c_array_set_capacity(self, self->capacity * 2);
+  if (TO_IMPL(self)->len >= TO_IMPL(self)->capacity) {
+    c_error_t err = c_array_set_capacity(self, TO_IMPL(self)->capacity * 2);
     if (err != C_ERROR_none) return err;
   }
 
-  memcpy((uint8_t*)self->data + (self->len * self->element_size), element,
-         self->element_size);
-  self->len++;
+  memcpy((uint8_t*)TO_IMPL(self)->data
+             + (TO_IMPL(self)->len * TO_IMPL(self)->element_size),
+         element, TO_IMPL(self)->element_size);
+  TO_IMPL(self)->len++;
 
   return C_ERROR_none;
 }
@@ -441,7 +483,7 @@ c_array_push(CArray* self, void const* element)
 c_error_t
 c_array_push_range(CArray* self, void const* elements, size_t elements_len)
 {
-  return c_array_insert_range(self, self->len, elements, elements_len);
+  return c_array_insert_range(self, TO_IMPL(self)->len, elements, elements_len);
 }
 
 /// @brief pop one element from the end
@@ -452,21 +494,22 @@ c_array_push_range(CArray* self, void const* elements, size_t elements_len)
 c_error_t
 c_array_pop(CArray* self, void* out_element)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  if (self->len == 0) return C_ERROR_wrong_len;
+  if (TO_IMPL(self)->len == 0) return C_ERROR_wrong_len;
 
   c_error_t err = C_ERROR_none;
 
   if (out_element) {
     memcpy(out_element,
-           (uint8_t*)self->data + ((self->len - 1U) * self->element_size),
-           self->element_size);
-    self->len--;
+           (uint8_t*)TO_IMPL(self)->data
+               + ((TO_IMPL(self)->len - 1U) * TO_IMPL(self)->element_size),
+           TO_IMPL(self)->element_size);
+    TO_IMPL(self)->len--;
   }
 
-  if (self->len <= self->capacity / 4) {
-    err = c_array_set_capacity(self, self->capacity / 2);
+  if (TO_IMPL(self)->len <= TO_IMPL(self)->capacity / 4) {
+    err = c_array_set_capacity(self, TO_IMPL(self)->capacity / 2);
   }
 
   return err;
@@ -482,24 +525,26 @@ c_array_pop(CArray* self, void* out_element)
 c_error_t
 c_array_insert(CArray* self, void const* element, size_t index)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  if (self->len <= index) return C_ERROR_wrong_index;
+  if (TO_IMPL(self)->len <= index) return C_ERROR_wrong_index;
 
-  if (self->len == self->capacity) {
-    c_error_t err = c_array_set_capacity(self, self->capacity * 2);
+  if (TO_IMPL(self)->len == TO_IMPL(self)->capacity) {
+    c_error_t err = c_array_set_capacity(self, TO_IMPL(self)->capacity * 2);
     if (err != C_ERROR_none) return err;
   }
 
-  if (index < self->len) {
-    memmove((uint8_t*)self->data + ((index + 1) * self->element_size),
-            (uint8_t*)self->data + (index * self->element_size),
-            (self->len - index) * self->element_size);
+  if (index < TO_IMPL(self)->len) {
+    memmove((uint8_t*)TO_IMPL(self)->data
+                + ((index + 1) * TO_IMPL(self)->element_size),
+            (uint8_t*)TO_IMPL(self)->data
+                + (index * TO_IMPL(self)->element_size),
+            (TO_IMPL(self)->len - index) * TO_IMPL(self)->element_size);
   }
 
-  memcpy((uint8_t*)self->data + (index * self->element_size), element,
-         self->element_size);
-  self->len++;
+  memcpy((uint8_t*)TO_IMPL(self)->data + (index * TO_IMPL(self)->element_size),
+         element, TO_IMPL(self)->element_size);
+  TO_IMPL(self)->len++;
 
   return C_ERROR_none;
 }
@@ -517,27 +562,29 @@ c_array_insert_range(CArray*     self,
                      void const* data,
                      size_t      data_len)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   assert(data);
   assert(data_len > 0);
 
-  if (self->len < index) return C_ERROR_wrong_index;
+  if (TO_IMPL(self)->len < index) return C_ERROR_wrong_index;
 
-  while ((self->len + data_len) > self->capacity) {
-    c_error_t err = c_array_set_capacity(self, self->capacity * 2);
+  while ((TO_IMPL(self)->len + data_len) > TO_IMPL(self)->capacity) {
+    c_error_t err = c_array_set_capacity(self, TO_IMPL(self)->capacity * 2);
     if (err != C_ERROR_none) return err;
   }
 
-  if (index < self->len) {
-    memmove((uint8_t*)self->data + ((index + data_len) * self->element_size),
-            (uint8_t*)self->data + (index * self->element_size),
-            (self->len - index) * self->element_size);
+  if (index < TO_IMPL(self)->len) {
+    memmove((uint8_t*)TO_IMPL(self)->data
+                + ((index + data_len) * TO_IMPL(self)->element_size),
+            (uint8_t*)TO_IMPL(self)->data
+                + (index * TO_IMPL(self)->element_size),
+            (TO_IMPL(self)->len - index) * TO_IMPL(self)->element_size);
   }
 
-  memcpy((uint8_t*)self->data + (index * self->element_size), data,
-         data_len * self->element_size);
+  memcpy((uint8_t*)TO_IMPL(self)->data + (index * TO_IMPL(self)->element_size),
+         data, data_len * TO_IMPL(self)->element_size);
 
-  self->len += data_len;
+  TO_IMPL(self)->len += data_len;
 
   return C_ERROR_none;
 }
@@ -548,14 +595,14 @@ c_array_insert_range(CArray*     self,
 void
 c_array_fill(CArray* self, void* data)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!data) return;
 
-  for (size_t iii = 0; iii < self->capacity; iii++) {
-    memcpy((char*)self->data + (iii * self->element_size), data,
-           self->element_size);
+  for (size_t iii = 0; iii < TO_IMPL(self)->capacity; iii++) {
+    memcpy((char*)TO_IMPL(self)->data + (iii * TO_IMPL(self)->element_size),
+           data, TO_IMPL(self)->element_size);
   }
-  self->len = self->capacity;
+  TO_IMPL(self)->len = TO_IMPL(self)->capacity;
 }
 
 /// @brief concatenate arr2 @ref CArray::data to arr1 @ref CArray::data
@@ -570,18 +617,18 @@ c_array_concatenate(CArray* arr1, CArray const* arr2)
 
   c_error_t err = C_ERROR_none;
 
-  if (arr1->element_size != arr2->element_size)
+  if (TO_IMPL(arr1)->element_size != TO_IMPL(arr2)->element_size)
     return C_ERROR_wrong_element_size;
 
-  if (arr1->capacity < (arr1->len + arr2->len)) {
-    err = c_array_set_capacity(arr1, arr1->len + arr2->len);
+  if (TO_IMPL(arr1)->capacity < (TO_IMPL(arr1)->len + TO_IMPL(arr2)->len)) {
+    err = c_array_set_capacity(arr1, TO_IMPL(arr1)->len + TO_IMPL(arr2)->len);
     if (err) return err;
   }
 
-  memcpy((char*)arr1->data + (arr1->len * arr1->element_size), arr2->data,
-         arr2->len * arr2->element_size);
+  memcpy((char*)arr1->data + (TO_IMPL(arr1)->len * TO_IMPL(arr1)->element_size),
+         TO_IMPL(arr2)->data, TO_IMPL(arr2)->len * TO_IMPL(arr2)->element_size);
 
-  arr1->len += arr2->len;
+  TO_IMPL(arr1)->len += TO_IMPL(arr2)->len;
 
   return err;
 }
@@ -594,17 +641,17 @@ c_array_concatenate(CArray* arr1, CArray const* arr2)
 c_error_t
 c_array_fill_with_repeat(CArray* self, void* data, size_t data_len)
 {
-  assert(self && self->data);
-  if (data_len > self->capacity) return C_ERROR_wrong_len;
+  assert(self && TO_IMPL(self)->data);
+  if (data_len > TO_IMPL(self)->capacity) return C_ERROR_wrong_len;
 
-  size_t const number_of_repeats = self->capacity / data_len;
-  size_t const repeat_size       = data_len * self->element_size;
+  size_t const number_of_repeats = TO_IMPL(self)->capacity / data_len;
+  size_t const repeat_size       = data_len * TO_IMPL(self)->element_size;
   for (size_t iii = 0; iii < number_of_repeats; ++iii) {
-    memcpy((char*)self->data + (iii * (repeat_size)), data,
-           data_len * self->element_size);
+    memcpy((char*)TO_IMPL(self)->data + (iii * (repeat_size)), data,
+           data_len * TO_IMPL(self)->element_size);
   }
 
-  self->len = number_of_repeats * data_len;
+  TO_IMPL(self)->len = number_of_repeats * data_len;
 
   return C_ERROR_none;
 }
@@ -616,21 +663,24 @@ c_array_fill_with_repeat(CArray* self, void* data, size_t data_len)
 c_error_t
 c_array_rotate_right(CArray* self, size_t elements_count)
 {
-  assert(self && self->data);
-  if ((elements_count == 0) || (elements_count > self->len))
+  assert(self && TO_IMPL(self)->data);
+  if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
     return C_ERROR_none;
 
-  void* tmp = malloc(elements_count * self->element_size);
+  void* tmp = malloc(elements_count * TO_IMPL(self)->element_size);
   if (!tmp) return C_ERROR_mem_allocation;
 
   memcpy(tmp,
-         (char*)self->data
-             + ((self->len - elements_count) * self->element_size),
-         elements_count * self->element_size);
+         (char*)TO_IMPL(self)->data
+             + ((TO_IMPL(self)->len - elements_count)
+                * TO_IMPL(self)->element_size),
+         elements_count * TO_IMPL(self)->element_size);
 
-  memmove((char*)self->data + (elements_count * self->element_size), self->data,
-          elements_count * self->element_size);
-  memcpy(self->data, tmp, elements_count * self->element_size);
+  memmove((char*)TO_IMPL(self)->data
+              + (elements_count * TO_IMPL(self)->element_size),
+          TO_IMPL(self)->data, elements_count * TO_IMPL(self)->element_size);
+  memcpy(TO_IMPL(self)->data, tmp,
+         elements_count * TO_IMPL(self)->element_size);
 
   free(tmp);
 
@@ -644,20 +694,24 @@ c_array_rotate_right(CArray* self, size_t elements_count)
 c_error_t
 c_array_rotate_left(CArray* self, size_t elements_count)
 {
-  assert(self && self->data);
-  if ((elements_count == 0) || (elements_count > self->len))
+  assert(self && TO_IMPL(self)->data);
+  if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
     return C_ERROR_none;
 
-  void* tmp = malloc(elements_count * self->element_size);
+  void* tmp = malloc(elements_count * TO_IMPL(self)->element_size);
   if (!tmp) return C_ERROR_mem_allocation;
 
-  memcpy(tmp, self->data, elements_count * self->element_size);
+  memcpy(tmp, TO_IMPL(self)->data,
+         elements_count * TO_IMPL(self)->element_size);
 
-  memmove(self->data, (char*)self->data + (elements_count * self->element_size),
-          elements_count * self->element_size);
-  memcpy((char*)self->data
-             + ((self->len - elements_count) * self->element_size),
-         tmp, elements_count * self->element_size);
+  memmove(TO_IMPL(self)->data,
+          (char*)TO_IMPL(self)->data
+              + (elements_count * TO_IMPL(self)->element_size),
+          elements_count * TO_IMPL(self)->element_size);
+  memcpy((char*)TO_IMPL(self)->data
+             + ((TO_IMPL(self)->len - elements_count)
+                * TO_IMPL(self)->element_size),
+         tmp, elements_count * TO_IMPL(self)->element_size);
 
   free(tmp);
 
@@ -672,20 +726,21 @@ c_array_rotate_left(CArray* self, size_t elements_count)
 c_error_t
 c_array_remove(CArray* self, size_t index)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  if (index <= self->len) return C_ERROR_wrong_index;
+  if (index <= TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
   c_error_t err = C_ERROR_none;
 
-  uint8_t* element = (uint8_t*)self->data + (index * self->element_size);
+  uint8_t* element
+      = (uint8_t*)TO_IMPL(self)->data + (index * TO_IMPL(self)->element_size);
 
-  memmove(element, element + self->element_size,
-          (self->len - index - 1) * self->element_size);
-  self->len--;
+  memmove(element, element + TO_IMPL(self)->element_size,
+          (TO_IMPL(self)->len - index - 1) * TO_IMPL(self)->element_size);
+  TO_IMPL(self)->len--;
 
-  if (self->len <= self->capacity / 4) {
-    err = c_array_set_capacity(self, self->capacity / 2);
+  if (TO_IMPL(self)->len <= TO_IMPL(self)->capacity / 4) {
+    err = c_array_set_capacity(self, TO_IMPL(self)->capacity / 2);
   }
 
   return err;
@@ -701,26 +756,27 @@ c_array_remove(CArray* self, size_t index)
 c_error_t
 c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
   c_error_t err = C_ERROR_none;
 
-  if (self->len == 0U) return C_ERROR_wrong_len;
-  if (start_index > (self->len - 1U)) return C_ERROR_wrong_index;
-  if ((start_index + range_size) > self->len) return C_ERROR_wrong_len;
+  if (TO_IMPL(self)->len == 0U) return C_ERROR_wrong_len;
+  if (start_index > (TO_IMPL(self)->len - 1U)) return C_ERROR_wrong_index;
+  if ((start_index + range_size) > TO_IMPL(self)->len) return C_ERROR_wrong_len;
 
-  uint8_t* start_ptr
-      = (uint8_t*)self->data + (start_index * self->element_size);
-  uint8_t const* end_ptr = (uint8_t*)self->data
-                           + ((start_index + range_size) * self->element_size);
-  size_t right_range_size
-      = (self->len - (start_index + range_size)) * self->element_size;
+  uint8_t* start_ptr = (uint8_t*)TO_IMPL(self)->data
+                       + (start_index * TO_IMPL(self)->element_size);
+  uint8_t const* end_ptr
+      = (uint8_t*)TO_IMPL(self)->data
+        + ((start_index + range_size) * TO_IMPL(self)->element_size);
+  size_t right_range_size = (TO_IMPL(self)->len - (start_index + range_size))
+                            * TO_IMPL(self)->element_size;
 
   memmove(start_ptr, end_ptr, right_range_size);
-  self->len -= range_size;
+  TO_IMPL(self)->len -= range_size;
 
-  if (self->len <= self->capacity / 4) {
-    err = c_array_set_capacity(self, self->capacity / 2);
+  if (TO_IMPL(self)->len <= TO_IMPL(self)->capacity / 4) {
+    err = c_array_set_capacity(self, TO_IMPL(self)->capacity / 2);
   }
 
   return err;
@@ -734,19 +790,21 @@ c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
 c_error_t
 c_array_deduplicate(CArray* self, int cmp(void const*, void const*))
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
   if (!cmp) return C_ERROR_none;
 
-  for (size_t iii = 0; iii < self->len; ++iii) {
-    for (size_t jjj = iii + 1; jjj < self->len; ++jjj) {
-      if (cmp((char*)self->data + (self->element_size * iii),
-              (char*)self->data + (self->element_size * jjj))
+  for (size_t iii = 0; iii < TO_IMPL(self)->len; ++iii) {
+    for (size_t jjj = iii + 1; jjj < TO_IMPL(self)->len; ++jjj) {
+      if (cmp((char*)TO_IMPL(self)->data + (TO_IMPL(self)->element_size * iii),
+              (char*)TO_IMPL(self)->data + (TO_IMPL(self)->element_size * jjj))
           == 0) {
-        memmove((char*)self->data + (jjj * self->element_size),
-                (char*)self->data + ((jjj + 1) * self->element_size),
-                (self->len - jjj + 1) * self->element_size);
-        self->len--;
+        memmove((char*)TO_IMPL(self)->data
+                    + (jjj * TO_IMPL(self)->element_size),
+                (char*)TO_IMPL(self)->data
+                    + ((jjj + 1) * TO_IMPL(self)->element_size),
+                (TO_IMPL(self)->len - jjj + 1) * TO_IMPL(self)->element_size);
+        TO_IMPL(self)->len--;
         jjj--;
       }
     }
@@ -768,19 +826,20 @@ c_error_t
 c_array_slice(CArray const* self,
               size_t        start_index,
               size_t        range,
-              CArray*       out_slice)
+              CArray**      out_slice)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  if (start_index > self->len) return C_ERROR_wrong_index;
-  range = (self->len - start_index) < range ? self->len : range;
+  if (start_index > TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
-  *out_slice
-      = (CArray){.data = (char*)self->data + (start_index * self->element_size),
-                 .len  = range,
-                 .element_size = self->element_size};
+  range
+      = (TO_IMPL(self)->len - start_index) < range ? TO_IMPL(self)->len : range;
 
-  return C_ERROR_none;
+  c_error_t err = c_array_create_from_raw(
+      (char*)TO_IMPL(self)->data + (start_index * TO_IMPL(self)->element_size),
+      range, TO_IMPL(self)->element_size, out_slice);
+
+  return err;
 }
 
 /// @brief an iterator to loop over the @ref CArray::data
@@ -792,11 +851,12 @@ c_array_slice(CArray const* self,
 bool
 c_array_iter(CArray* self, size_t* index, void** element)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
   if (!index || !element) return false;
 
-  if (*index < self->len) {
-    *element = (char*)self->data + (*index * self->element_size);
+  if (*index < TO_IMPL(self)->len) {
+    *element
+        = (char*)TO_IMPL(self)->data + (*index * TO_IMPL(self)->element_size);
     *index += 1;
     return true;
   }
@@ -809,21 +869,22 @@ c_array_iter(CArray* self, size_t* index, void** element)
 c_error_t
 c_array_reverse(CArray* self)
 {
-  assert(self && self->data);
+  assert(self && TO_IMPL(self)->data);
 
-  char* start = self->data;
-  char* end   = (char*)self->data + ((self->len - 1) * self->element_size);
+  char* start = TO_IMPL(self)->data;
+  char* end   = (char*)TO_IMPL(self)->data
+              + ((TO_IMPL(self)->len - 1) * TO_IMPL(self)->element_size);
 
-  void* tmp = malloc(self->element_size);
+  void* tmp = malloc(TO_IMPL(self)->element_size);
   if (!tmp) return C_ERROR_mem_allocation;
 
   while (end > start) {
-    memcpy(tmp, start, self->element_size);
-    memcpy(start, end, self->element_size);
-    memcpy(end, tmp, self->element_size);
+    memcpy(tmp, start, TO_IMPL(self)->element_size);
+    memcpy(start, end, TO_IMPL(self)->element_size);
+    memcpy(end, tmp, TO_IMPL(self)->element_size);
 
-    start += self->element_size;
-    end -= self->element_size;
+    start += TO_IMPL(self)->element_size;
+    end -= TO_IMPL(self)->element_size;
   }
 
   free(tmp);
@@ -836,8 +897,8 @@ c_array_reverse(CArray* self)
 void
 c_array_clear(CArray* self)
 {
-  assert(self && self->data);
-  self->len = 0;
+  assert(self && TO_IMPL(self)->data);
+  TO_IMPL(self)->len = 0;
 }
 
 /// @brief deinit an array object
@@ -845,11 +906,13 @@ c_array_clear(CArray* self)
 /// @note this could handle self as NULL
 /// @param[in] self
 void
-c_array_deinit(CArray* self)
+c_array_destroy(CArray** self)
 {
-  if (self && self->data) {
-    if (self->capacity) free(self->data);
-    *self = (CArray){0};
+  if (self && TO_IMPL(*self)->data) {
+    if (TO_IMPL(*self)->capacity) free(TO_IMPL(*self)->data);
+    *TO_IMPL(*self) = (CArrayImpl){0};
+    free(*self);
+    *self = NULL;
   }
 }
 
