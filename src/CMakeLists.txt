@@ -1,7 +1,7 @@
 project(anylibs_src LANGUAGES C)
 
 add_library(${PROJECT_NAME}
-    array.c
+    vec.c
     error.c
     allocator.c
 )

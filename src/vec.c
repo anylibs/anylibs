@@ -1,5 +1,5 @@
 /**
- * @file array.h
+ * @file vec.h
  * @author Mohamed A. Elmeligy
  * @date 2024-2025
  * @copyright MIT License
@@ -15,7 +15,7 @@
  * A PARTICULAR PURPOSE. See the License for details.
  */
 
-#include "anylibs/array.h"
+#include "anylibs/vec.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -31,59 +31,58 @@
 #pragma warning(disable : 4996) // disable warning about unsafe functions
 #endif
 
-#define TO_IMPL(arr) ((CArrayImpl*)(arr))
-#define FROM_IMPL(impl) ((CArray*)(impl))
-#define TO_BYTES(arr, units) ((units) * TO_IMPL(arr)->element_size)
-#define TO_UNITS(arr, bytes) ((bytes) / TO_IMPL(arr)->element_size)
+#define TO_IMPL(vec) ((CVecImpl*)(vec))
+#define FROM_IMPL(impl) ((CVec*)(impl))
+#define TO_BYTES(vec, units) ((units) * TO_IMPL(vec)->element_size)
+#define TO_UNITS(vec, bytes) ((bytes) / TO_IMPL(vec)->element_size)
 
-typedef struct CArrayImpl {
+typedef struct CVecImpl {
   // char*  data;     ///< heap allocated data
   CMemory     mem; ///< heap allocated data
   size_t      len; ///< current length, note: this unit based not bytes based
   size_t      element_size; ///< size of the unit
   CAllocator* allocator;    ///< memory allocator/deallocator
-} CArrayImpl;
+} CVecImpl;
 
-/// @brief intialize a new array object
+/// @brief intialize a new vec object
 /// @param[in] element_size
 /// @param[in] allocator the allocator (if NULL the Default Allocator will be
 ///                      used)
-/// @param[out] out_c_array the result CArray object created
+/// @param[out] out_c_vec the result CVec object created
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_create(size_t element_size, CAllocator* allocator, CArray** out_c_array)
+c_vec_create(size_t element_size, CAllocator* allocator, CVec** out_c_vec)
 {
-  return c_array_create_with_capacity(element_size, 1U, false, allocator,
-                                      out_c_array);
+  return c_vec_create_with_capacity(element_size, 1U, false, allocator,
+                                    out_c_vec);
 }
 
-/// @brief same as @ref c_array_create but with allocating capacity
+/// @brief same as @ref c_vec_create but with allocating capacity
 /// @param[in] element_size
 /// @param[in] capacity maximum number of elements to be allocated, minimum
 ///                     capacity is 1
 /// @param[in] zero_initialized should zero the memory or not
 /// @param[in] allocator the allocator (if NULL the Default Allocator will be
 ///                      used)
-/// @param[out] out_c_array the result CArray object created
+/// @param[out] out_c_vec the result CVec object created
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_create_with_capacity(size_t      element_size,
-                             size_t      capacity,
-                             bool        zero_initialized,
-                             CAllocator* allocator,
-                             CArray**    out_c_array)
+c_vec_create_with_capacity(size_t      element_size,
+                           size_t      capacity,
+                           bool        zero_initialized,
+                           CAllocator* allocator,
+                           CVec**      out_c_vec)
 {
   assert(element_size > 0 || capacity > 0);
 
-  if (!out_c_array) return C_ERROR_none;
+  if (!out_c_vec) return C_ERROR_none;
   if (!allocator) c_allocator_default(&allocator);
 
   CMemory   impl_mem = {0}, data_mem = {0};
-  c_error_t err
-      = c_allocator_alloc(allocator, c_allocator_alignas(CArrayImpl, 1),
-                          zero_initialized, &impl_mem);
+  c_error_t err = c_allocator_alloc(allocator, c_allocator_alignas(CVecImpl, 1),
+                                    zero_initialized, &impl_mem);
   if (err) goto ERROR_ALLOC;
-  CArrayImpl* impl = impl_mem.data;
+  CVecImpl* impl = impl_mem.data;
   err = c_allocator_alloc(allocator, capacity * element_size, element_size,
                           zero_initialized, &data_mem);
   if (err) goto ERROR_ALLOC;
@@ -93,7 +92,7 @@ c_array_create_with_capacity(size_t      element_size,
   impl->len          = 0;
   impl->allocator    = allocator;
 
-  *out_c_array = FROM_IMPL(impl);
+  *out_c_vec = FROM_IMPL(impl);
 
   return C_ERROR_none;
 
@@ -103,40 +102,40 @@ ERROR_ALLOC:
   return C_ERROR_mem_allocation;
 }
 
-/// @brief create @ref CArrayImpl from raw pointer
+/// @brief create @ref CVecImpl from raw pointer
 /// @note this will not allocate memory for the data
 /// @param[in] data
-/// @param[in] data_len this is in @ref CArrayImpl::element_size not bytes
+/// @param[in] data_len this is in @ref CVecImpl::element_size not bytes
 /// @param[in] element_size
 /// @param[in] allocator the allocator (if NULL the Default Allocator will be
 ///                      used)
-/// @param[out] out_c_array the result CArray object created
+/// @param[out] out_c_vec the result CVec object created
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_create_from_raw(void*       data,
-                        size_t      data_len,
-                        size_t      element_size,
-                        CAllocator* allocator,
-                        CArray**    out_c_array)
+c_vec_create_from_raw(void*       data,
+                      size_t      data_len,
+                      size_t      element_size,
+                      CAllocator* allocator,
+                      CVec**      out_c_vec)
 {
   assert(element_size > 0);
   assert(data && data_len > 0);
 
-  if (!out_c_array) return C_ERROR_none;
+  if (!out_c_vec) return C_ERROR_none;
   if (!allocator) c_allocator_default(&allocator);
 
   CMemory   impl_mem = {0};
-  c_error_t err      = c_allocator_alloc(
-      allocator, c_allocator_alignas(CArrayImpl, 1), false, &impl_mem);
+  c_error_t err = c_allocator_alloc(allocator, c_allocator_alignas(CVecImpl, 1),
+                                    false, &impl_mem);
   if (err) goto ERROR_ALLOC;
-  CArrayImpl* impl = impl_mem.data;
+  CVecImpl* impl = impl_mem.data;
 
   impl->mem          = (CMemory){.data = data};
   impl->element_size = element_size;
   impl->len          = 0;
   impl->allocator    = allocator;
 
-  *out_c_array = FROM_IMPL(impl);
+  *out_c_vec = FROM_IMPL(impl);
 
   return C_ERROR_none;
 
@@ -145,69 +144,67 @@ ERROR_ALLOC:
   return C_ERROR_mem_allocation;
 }
 
-/// @brief clone @ref CArrayImpl
+/// @brief clone @ref CVecImpl
 /// @note this will make a deep copy
 /// @param[in] self
 /// @param[in] should_shrink_clone
-/// @param[out] out_c_array
+/// @param[out] out_c_vec
 /// @return
 c_error_t
-c_array_clone(CArray const* self,
-              bool          should_shrink_clone,
-              CArray**      out_c_array)
+c_vec_clone(CVec const* self, bool should_shrink_clone, CVec** out_c_vec)
 {
   assert(self && TO_IMPL(self)->mem.data);
-  if (!out_c_array) return C_ERROR_none;
+  if (!out_c_vec) return C_ERROR_none;
 
-  c_error_t err = c_array_create_with_capacity(
+  c_error_t err = c_vec_create_with_capacity(
       TO_IMPL(self)->element_size,
       should_shrink_clone ? TO_IMPL(self)->len
                           : TO_UNITS(self, TO_IMPL(self)->mem.size),
-      false, TO_IMPL(self)->allocator, out_c_array);
+      false, TO_IMPL(self)->allocator, out_c_vec);
   if (err) return err;
 
-  memcpy(TO_IMPL(*out_c_array)->mem.data, TO_IMPL(self)->mem.data,
+  memcpy(TO_IMPL(*out_c_vec)->mem.data, TO_IMPL(self)->mem.data,
          TO_BYTES(self, TO_IMPL(self)->len));
-  TO_IMPL(*out_c_array)->len = TO_IMPL(self)->len;
+  TO_IMPL(*out_c_vec)->len = TO_IMPL(self)->len;
 
   return C_ERROR_none;
 }
 
-/// @brief check wether the array is empty
+/// @brief check wether the vec is empty
 /// @param[in] self
 /// @return bool
 bool
-c_array_is_empty(CArray const* self)
+c_vec_is_empty(CVec const* self)
 {
   assert(self);
   return TO_IMPL(self)->len > 0;
 }
 
-/// @brief get array length
+/// @brief get vec length
 /// @param[in] self
-/// @return @ref CArrayImpl::len
+/// @return @ref CVecImpl::len
 size_t
-c_array_len(CArray const* self)
+c_vec_len(CVec const* self)
 {
   assert(self);
   return TO_IMPL(self)->len;
 }
 
-/// @brief set array length
+/// @brief set vec length
 ///        this is useful if you want
 ///        to manipulate the data by yourself
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] new_len
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_set_len(CArray* self, size_t new_len)
+c_vec_set_len(CVec* self, size_t new_len)
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(new_len > 0);
 
   if (new_len > TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err = c_array_set_capacity(self, new_len);
+    c_error_t err = c_vec_set_capacity(self, new_len);
     if (err != C_ERROR_none) return err;
   }
 
@@ -215,14 +212,14 @@ c_array_set_len(CArray* self, size_t new_len)
   return C_ERROR_none;
 }
 
-/// @brief get array capacity
-///        this will return the capacity in @ref CArrayImpl::element_size wise
+/// @brief get vec capacity
+///        this will return the capacity in @ref CVecImpl::element_size wise
 ///        return 'capacity = 10' which means
 ///        we can have up to '10 * element_size' bytes
 /// @param[in] self
-/// @return @ref CArrayImpl::capacity
+/// @return @ref CVecImpl::capacity
 size_t
-c_array_capacity(CArray const* self)
+c_vec_capacity(CVec const* self)
 {
   assert(self);
   return TO_UNITS(self, TO_IMPL(self)->mem.size);
@@ -232,19 +229,19 @@ c_array_capacity(CArray const* self)
 /// @param[in] self
 /// @return the remaining space
 size_t
-c_array_spare_capacity(CArray const* self)
+c_vec_spare_capacity(CVec const* self)
 {
   assert(self);
   return TO_UNITS(self, TO_IMPL(self)->mem.size) - TO_IMPL(self)->len;
 }
 
 /// @brief set capacity
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self address of self
 /// @param[in] new_capacity
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_set_capacity(CArray* self, size_t new_capacity)
+c_vec_set_capacity(CVec* self, size_t new_capacity)
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(new_capacity > 0);
@@ -257,20 +254,20 @@ c_array_set_capacity(CArray* self, size_t new_capacity)
 
 /// @brief get elemet_size in bytes
 /// @param[in] self
-/// @return @ref CArrayImpl::element_size
+/// @return @ref CVecImpl::element_size
 size_t
-c_array_element_size(CArray* self)
+c_vec_element_size(CVec* self)
 {
   return TO_IMPL(self)->element_size;
 }
 
-/// @brief make the @ref CArrayImpl::capacity equals @ref CArrayImpl::len
+/// @brief make the @ref CVecImpl::capacity equals @ref CVecImpl::len
 /// @param[in] self
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_shrink_to_fit(CArray* self)
+c_vec_shrink_to_fit(CVec* self)
 {
-  return c_array_set_capacity(self, TO_IMPL(self)->len);
+  return c_vec_set_capacity(self, TO_IMPL(self)->len);
 }
 
 /// @brief search for @p element
@@ -280,10 +277,10 @@ c_array_shrink_to_fit(CArray* self)
 /// @param[out] out_index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_search(CArray const* self,
-               void*         element,
-               int           cmp(void const*, void const*),
-               size_t*       out_index)
+c_vec_search(CVec const* self,
+             void*       element,
+             int         cmp(void const*, void const*),
+             size_t*     out_index)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!out_index || !cmp) return C_ERROR_none;
@@ -300,7 +297,7 @@ c_array_search(CArray const* self,
 }
 
 /// @brief search for @p element using binary search tree
-/// @note  If @ref CArrayImpl::data is not sorted, the returned result is
+/// @note  If @ref CVecImpl::data is not sorted, the returned result is
 ///        unspecified and meaningless
 /// @param[in] self
 /// @param[in] element
@@ -308,10 +305,10 @@ c_array_search(CArray const* self,
 /// @param[out] out_index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_binary_search(CArray const* self,
-                      void const*   element,
-                      int           cmp(void const*, void const*),
-                      size_t*       out_index)
+c_vec_binary_search(CVec const* self,
+                    void const* element,
+                    int         cmp(void const*, void const*),
+                    size_t*     out_index)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!out_index || !cmp) return C_ERROR_none;
@@ -330,17 +327,17 @@ c_array_binary_search(CArray const* self,
 }
 
 /// @brief check if @p elements is the same as the start elements
-///        of @ref CArrayImpl::data
+///        of @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] elements
 /// @param[in] elements_len
 /// @param[in] cmp this is similar to strcmp
 /// @return
 bool
-c_array_starts_with(CArray const* self,
-                    void*         elements,
-                    size_t        elements_len,
-                    int           cmp(void const*, void const*))
+c_vec_starts_with(CVec const* self,
+                  void*       elements,
+                  size_t      elements_len,
+                  int         cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(elements && elements_len > 0);
@@ -360,17 +357,17 @@ c_array_starts_with(CArray const* self,
 }
 
 /// @brief check if @p elements is the same as the end elements
-///        of @ref CArrayImpl::data
+///        of @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] elements
 /// @param[in] elements_len
 /// @param[in] cmp this is similar to strcmp
 /// @return
 bool
-c_array_ends_with(CArray const* self,
-                  void*         elements,
-                  size_t        elements_len,
-                  int           cmp(void const*, void const*))
+c_vec_ends_with(CVec const* self,
+                void*       elements,
+                size_t      elements_len,
+                int         cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(elements && elements_len > 0);
@@ -394,7 +391,7 @@ c_array_ends_with(CArray const* self,
 /// @param[in] self
 /// @param[in] cmp this is similar to strcmp
 void
-c_array_sort(CArray* self, int cmp(void const*, void const*))
+c_vec_sort(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!cmp) return;
@@ -408,7 +405,7 @@ c_array_sort(CArray* self, int cmp(void const*, void const*))
 /// @param[in] cmp this is similar to strcmp
 /// @return return if sorted or not
 bool
-c_array_is_sorted(CArray* self, int cmp(void const*, void const*))
+c_vec_is_sorted(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -428,7 +425,7 @@ c_array_is_sorted(CArray* self, int cmp(void const*, void const*))
 /// @param[in] cmp this is similar to strcmp
 /// @return return if sorted or not
 bool
-c_array_is_sorted_inv(CArray* self, int cmp(void const*, void const*))
+c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -449,7 +446,7 @@ c_array_is_sorted_inv(CArray* self, int cmp(void const*, void const*))
 /// @param[out] out_element
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_get(CArray const* self, size_t index, void** out_element)
+c_vec_get(CVec const* self, size_t index, void** out_element)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!out_element) return C_ERROR_none;
@@ -461,22 +458,22 @@ c_array_get(CArray const* self, size_t index, void** out_element)
 
 /// @brief push one element at the end
 ///        if you want to push literals (example: 3, 5 or 10 ...)
-///        c_array_push(array, &(int){3});
-/// @note this could reset new reallocated @ref CArrayImpl::data
+///        c_vec_push(vec, &(int){3});
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @note this will COPY @p element
 /// @param[in] self pointer to self
-/// @param[in] element a pointer the data of size @ref CArrayImpl::element_size
+/// @param[in] element a pointer the data of size @ref CVecImpl::element_size
 ///                    that you want to push back
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_push(CArray* self, void const* element)
+c_vec_push(CVec* self, void const* element)
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(element);
 
   if (TO_IMPL(self)->len >= TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err = c_array_set_capacity(
-        self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+    c_error_t err
+        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
     if (err != C_ERROR_none) return err;
   }
 
@@ -487,26 +484,26 @@ c_array_push(CArray* self, void const* element)
   return C_ERROR_none;
 }
 
-/// @brief push elements at the end of @ref CArrayImpl
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @brief push elements at the end of @ref CVecImpl
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @note this will COPY @p element
 /// @param[in] self
 /// @param[in] elements
 /// @param[in] elements_len
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_push_range(CArray* self, void const* elements, size_t elements_len)
+c_vec_push_range(CVec* self, void const* elements, size_t elements_len)
 {
-  return c_array_insert_range(self, TO_IMPL(self)->len, elements, elements_len);
+  return c_vec_insert_range(self, TO_IMPL(self)->len, elements, elements_len);
 }
 
 /// @brief pop one element from the end
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self
 /// @param[out] out_element the returned result
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_pop(CArray* self, void* out_element)
+c_vec_pop(CVec* self, void* out_element)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -523,30 +520,29 @@ c_array_pop(CArray* self, void* out_element)
   }
 
   if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_array_set_capacity(self,
-                               TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
   }
 
   return err;
 }
 
 /// @brief insert 1 element at @p index
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self pointer to self
-/// @param[in] element a pointer the data of size @ref CArrayImpl::element_size
+/// @param[in] element a pointer the data of size @ref CVecImpl::element_size
 ///                    that you want to push back
 /// @param[in] index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_insert(CArray* self, void const* element, size_t index)
+c_vec_insert(CVec* self, void const* element, size_t index)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
   if (TO_IMPL(self)->len <= index) return C_ERROR_wrong_index;
 
   if (TO_IMPL(self)->len == TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err = c_array_set_capacity(
-        self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+    c_error_t err
+        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
     if (err != C_ERROR_none) return err;
   }
 
@@ -564,17 +560,14 @@ c_array_insert(CArray* self, void const* element, size_t index)
 }
 
 /// @brief insert multiple elements at index
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] index
 /// @param[in] data
 /// @param[in] data_len
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_insert_range(CArray*     self,
-                     size_t      index,
-                     void const* data,
-                     size_t      data_len)
+c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len)
 {
   assert(self && TO_IMPL(self)->mem.data);
   assert(data);
@@ -584,8 +577,8 @@ c_array_insert_range(CArray*     self,
 
   while ((TO_IMPL(self)->len + data_len)
          > TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err = c_array_set_capacity(
-        self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+    c_error_t err
+        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
     if (err != C_ERROR_none) return err;
   }
 
@@ -604,61 +597,61 @@ c_array_insert_range(CArray*     self,
   return C_ERROR_none;
 }
 
-/// @brief fill the whole @ref CArrayImpl::capacity with @p data
+/// @brief fill the whole @ref CVecImpl::capacity with @p data
 /// @param[in] self
 /// @param[in] data
 void
-c_array_fill(CArray* self, void* data)
+c_vec_fill(CVec* self, void* data)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!data) return;
 
-  size_t array_capacity = TO_UNITS(self, TO_IMPL(self)->mem.size);
+  size_t vec_capacity = TO_UNITS(self, TO_IMPL(self)->mem.size);
 
-  for (size_t iii = 0; iii < array_capacity; iii++) {
+  for (size_t iii = 0; iii < vec_capacity; iii++) {
     memcpy((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii), data,
            TO_IMPL(self)->element_size);
   }
-  TO_IMPL(self)->len = array_capacity;
+  TO_IMPL(self)->len = vec_capacity;
 }
 
-/// @brief concatenate arr2 @ref CArrayImpl::data to arr1 @ref CArrayImpl::data
-/// @param[in] arr1
-/// @param[in] arr2
+/// @brief concatenate vec2 @ref CVecImpl::data to vec1 @ref CVecImpl::data
+/// @param[in] vec1
+/// @param[in] vec2
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_concatenate(CArray* arr1, CArray const* arr2)
+c_vec_concatenate(CVec* vec1, CVec const* vec2)
 {
-  assert(arr1 && arr1->data);
-  assert(arr2 && arr2->data);
+  assert(vec1 && vec1->data);
+  assert(vec2 && vec2->data);
 
   c_error_t err = C_ERROR_none;
 
-  if (TO_IMPL(arr1)->element_size != TO_IMPL(arr2)->element_size)
+  if (TO_IMPL(vec1)->element_size != TO_IMPL(vec2)->element_size)
     return C_ERROR_wrong_element_size;
 
-  if ((TO_IMPL(arr1)->mem.size / TO_IMPL(arr1)->element_size)
-      < (TO_IMPL(arr1)->len + TO_IMPL(arr2)->len)) {
-    err = c_array_set_capacity(arr1, TO_IMPL(arr1)->len + TO_IMPL(arr2)->len);
+  if ((TO_IMPL(vec1)->mem.size / TO_IMPL(vec1)->element_size)
+      < (TO_IMPL(vec1)->len + TO_IMPL(vec2)->len)) {
+    err = c_vec_set_capacity(vec1, TO_IMPL(vec1)->len + TO_IMPL(vec2)->len);
     if (err) return err;
   }
 
-  memcpy((char*)arr1->data + (TO_IMPL(arr1)->len * TO_IMPL(arr1)->element_size),
-         TO_IMPL(arr2)->mem.data,
-         TO_IMPL(arr2)->len * TO_IMPL(arr2)->element_size);
+  memcpy((char*)vec1->data + (TO_IMPL(vec1)->len * TO_IMPL(vec1)->element_size),
+         TO_IMPL(vec2)->mem.data,
+         TO_IMPL(vec2)->len * TO_IMPL(vec2)->element_size);
 
-  TO_IMPL(arr1)->len += TO_IMPL(arr2)->len;
+  TO_IMPL(vec1)->len += TO_IMPL(vec2)->len;
 
   return err;
 }
 
-/// @brief fill @ref CArrayImpl::data with repeated @p data
+/// @brief fill @ref CVecImpl::data with repeated @p data
 /// @param[in] self
 /// @param[in] data
-/// @param[in] data_len this is in @ref CArrayImpl::element_size not bytes
+/// @param[in] data_len this is in @ref CVecImpl::element_size not bytes
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_fill_with_repeat(CArray* self, void* data, size_t data_len)
+c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (data_len > TO_UNITS(self, TO_IMPL(self)->mem.size))
@@ -682,7 +675,7 @@ c_array_fill_with_repeat(CArray* self, void* data, size_t data_len)
 /// @param[in] elements_count
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_rotate_right(CArray* self, size_t elements_count)
+c_vec_rotate_right(CVec* self, size_t elements_count)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
@@ -713,7 +706,7 @@ c_array_rotate_right(CArray* self, size_t elements_count)
 /// @param[in] elements_count
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_rotate_left(CArray* self, size_t elements_count)
+c_vec_rotate_left(CVec* self, size_t elements_count)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
@@ -739,13 +732,13 @@ c_array_rotate_left(CArray* self, size_t elements_count)
   return C_ERROR_none;
 }
 
-/// @brief remove element from CArray
-/// @note this could reset new reallocated @ref CArrayImpl::data
+/// @brief remove element from CVec
+/// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] index index to be removed
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_remove(CArray* self, size_t index)
+c_vec_remove(CVec* self, size_t index)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -760,22 +753,21 @@ c_array_remove(CArray* self, size_t index)
   TO_IMPL(self)->len--;
 
   if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_array_set_capacity(self,
-                               TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
   }
 
   return err;
 }
 
-/// @brief remove a range of elements from CArray starting from @p start_index
+/// @brief remove a range of elements from CVec starting from @p start_index
 ///        with size @p range_size
-/// @note this could reset new reallocated @p CArray::data
+/// @note this could reset new reallocated @p CVec::data
 /// @param[in] self
 /// @param[in] start_index
 /// @param[in] range_size range length
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
+c_vec_remove_range(CVec* self, size_t start_index, size_t range_size)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -796,8 +788,7 @@ c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
   TO_IMPL(self)->len -= range_size;
 
   if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_array_set_capacity(self,
-                               TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
   }
 
   return err;
@@ -809,7 +800,7 @@ c_array_remove_range(CArray* self, size_t start_index, size_t range_size)
 /// @param[in] cmp this is similar to strcmp
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_deduplicate(CArray* self, int cmp(void const*, void const*))
+c_vec_deduplicate(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -834,20 +825,20 @@ c_array_deduplicate(CArray* self, int cmp(void const*, void const*))
   return C_ERROR_none;
 }
 
-/// @brief get a slice from @ref CArrayImpl
+/// @brief get a slice from @ref CVecImpl
 /// @note this is only reference to the data
-///       so @ref CArrayImpl::capacity will be zero
+///       so @ref CVecImpl::capacity will be zero
 /// @param[in] self
 /// @param[in] start_index
-/// @param[in] range if range is bigger than @ref CArrayImpl::len,
-///                  @ref CArrayImpl::len will be the returned range
+/// @param[in] range if range is bigger than @ref CVecImpl::len,
+///                  @ref CVecImpl::len will be the returned range
 /// @param[out] out_slice
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_array_slice(CArray const* self,
-              size_t        start_index,
-              size_t        range,
-              CArray**      out_slice)
+c_vec_slice(CVec const* self,
+            size_t      start_index,
+            size_t      range,
+            CVec**      out_slice)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -856,21 +847,21 @@ c_array_slice(CArray const* self,
   range
       = (TO_IMPL(self)->len - start_index) < range ? TO_IMPL(self)->len : range;
 
-  c_error_t err = c_array_create_from_raw(
+  c_error_t err = c_vec_create_from_raw(
       (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, start_index), range,
       TO_IMPL(self)->element_size, TO_IMPL(self)->allocator, out_slice);
 
   return err;
 }
 
-/// @brief an iterator to loop over the @ref CArrayImpl::data
+/// @brief an iterator to loop over the @ref CVecImpl::data
 /// @param[in] self
 /// @param[in] index pointer to a counter index, it will keep count
-///                  till @ref CArrayImpl::len
+///                  till @ref CVecImpl::len
 /// @param[in] element a pointer to the current element
-/// @return bool indicating if we reached the end of the array
+/// @return bool indicating if we reached the end of the vec
 bool
-c_array_iter(CArray* self, size_t* index, void** element)
+c_vec_iter(CVec* self, size_t* index, void** element)
 {
   assert(self && TO_IMPL(self)->mem.data);
   if (!index || !element) return false;
@@ -884,10 +875,10 @@ c_array_iter(CArray* self, size_t* index, void** element)
   return false;
 }
 
-/// @brief reverse the @ref CArrayImpl::data in place
+/// @brief reverse the @ref CVecImpl::data in place
 /// @param[in] self
 c_error_t
-c_array_reverse(CArray* self)
+c_vec_reverse(CVec* self)
 {
   assert(self && TO_IMPL(self)->mem.data);
 
@@ -915,20 +906,20 @@ c_array_reverse(CArray* self)
   return C_ERROR_none;
 }
 
-/// @brief clear the @ref CArrayImpl without changing the capacity
+/// @brief clear the @ref CVecImpl without changing the capacity
 /// @param[in] self
 void
-c_array_clear(CArray* self)
+c_vec_clear(CVec* self)
 {
   assert(self && TO_IMPL(self)->mem.data);
   TO_IMPL(self)->len = 0;
 }
 
-/// @brief destroy an array object
+/// @brief destroy an vec object
 /// @note this could handle self as NULL
 /// @param[in] self
 void
-c_array_destroy(CArray** self)
+c_vec_destroy(CVec** self)
 {
   if (self && TO_IMPL(*self)->mem.data) {
     CAllocator* allocator = TO_IMPL(*self)->allocator;
