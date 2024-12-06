@@ -1,7 +1,8 @@
 /**
- * @file array.c
- * @copyright (C) 2024-2025 Mohamed A. Elmeligy
- * MIT License
+ * @file array.h
+ * @author Mohamed A. Elmeligy
+ * @date 2024-2025
+ * @copyright MIT License
  *
  * Permission is hereby granted, free of charge, to use, copy, modify, and
  * distribute this software, subject to the following conditions:
@@ -19,18 +20,28 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "allocator.h"
 #include "error.h"
 
 typedef struct CArray {
   void* data; ///< heap allocated data
 } CArray;
 
-c_error_t c_array_create(size_t element_size, CArray** out_c_array);
+c_error_t c_array_create(size_t      element_size,
+                         CAllocator* allocator,
+                         CArray**    out_c_array);
 
-c_error_t c_array_create_with_capacity(size_t   element_size,
-                                       size_t   capacity,
-                                       bool     zeroed_out,
-                                       CArray** out_c_array);
+c_error_t c_array_create_with_capacity(size_t      element_size,
+                                       size_t      capacity,
+                                       bool        zero_initialized,
+                                       CAllocator* allocator,
+                                       CArray**    out_c_array);
+
+c_error_t c_array_create_from_raw(void*       data,
+                                  size_t      data_len,
+                                  size_t      element_size,
+                                  CAllocator* allocator,
+                                  CArray**    out_c_array);
 
 c_error_t c_array_clone(CArray const* self,
                         bool          should_shrink_clone,

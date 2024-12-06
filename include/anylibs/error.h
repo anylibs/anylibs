@@ -1,7 +1,8 @@
 /**
  * @file error.h
- * @copyright (C) 2024-2025 Mohamed A. Elmeligy
- * MIT License
+ * @author Mohamed A. Elmeligy
+ * @date 2024-2025
+ * @copyright MIT License
  *
  * Permission is hereby granted, free of charge, to use, copy, modify, and
  * distribute this software, subject to the following conditions:
@@ -28,6 +29,7 @@ typedef enum c_error_t {
   C_ERROR_empty,
   C_ERROR_wrong_range,
   C_ERROR_not_found,
+  C_ERROR_wrong_alignment,
 } c_error_t;
 
 char const* c_error_to_str(c_error_t code);

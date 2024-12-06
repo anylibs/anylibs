@@ -4,4 +4,5 @@ macro (create_test name deps)
 endmacro()
 
 create_test(array anylibs_src)
+create_test(allocator anylibs_src)
 

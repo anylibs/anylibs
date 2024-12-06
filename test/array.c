@@ -1,7 +1,8 @@
 /**
  * @file array.c
- * @copyright (C) 2024-2025 Mohamed A. Elmeligy
- * MIT License
+ * @author Mohamed A. Elmeligy
+ * @date 2024-2025
+ * @copyright MIT License
  *
  * Permission is hereby granted, free of charge, to use, copy, modify, and
  * distribute this software, subject to the following conditions:
@@ -29,19 +30,19 @@ typedef struct CArrayTest {
 
 UTEST_F_SETUP(CArrayTest)
 {
-  int err = c_array_create(sizeof(int), &utest_fixture->arr);
+  int err = c_array_create(sizeof(int), NULL, &utest_fixture->arr);
   ASSERT_EQ(err, 0);
 
   err = c_array_push(utest_fixture->arr, &(int){12});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(utest_fixture->arr, &(int){13});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(utest_fixture->arr, &(int){14});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(utest_fixture->arr, &(int){15});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(utest_fixture->arr, &(int){16});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(c_array_len(utest_fixture->arr), 5U);
 }
 
@@ -55,14 +56,14 @@ UTEST_F(CArrayTest, pop)
 {
   int data = 0;
   int err  = c_array_pop(utest_fixture->arr, &data);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(data, 16);
 }
 
 UTEST_F(CArrayTest, remove_range)
 {
   int err = c_array_remove_range(utest_fixture->arr, 1U, 3U);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(c_array_len(utest_fixture->arr), 2U);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 12);
 }
@@ -70,7 +71,7 @@ UTEST_F(CArrayTest, remove_range)
 UTEST_F(CArrayTest, insert)
 {
   int err = c_array_insert(utest_fixture->arr, &(int){20}, 0);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 20);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[1], 12);
 }
@@ -78,7 +79,7 @@ UTEST_F(CArrayTest, insert)
 UTEST_F(CArrayTest, insert_range)
 {
   int err = c_array_insert_range(utest_fixture->arr, 1, &(int[]){1, 2, 3}, 3);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(c_array_len(utest_fixture->arr), 8U);
 
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 12);
@@ -103,7 +104,7 @@ UTEST_F(CArrayTest, slice)
 {
   CArray* slice;
   int     err = c_array_slice(utest_fixture->arr, 1, 3, &slice);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(((int*)slice->data)[0], 13);
   EXPECT_EQ(((int*)slice->data)[1], 14);
@@ -116,7 +117,7 @@ UTEST_F(CArrayTest, clone)
 {
   CArray* clone;
   int     err = c_array_clone(utest_fixture->arr, true, &clone);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(c_array_len(clone), c_array_len(utest_fixture->arr));
   EXPECT_EQ(c_array_capacity(clone), c_array_len(utest_fixture->arr));
@@ -132,7 +133,7 @@ UTEST_F(CArrayTest, clone)
 UTEST_F(CArrayTest, reverse)
 {
   int err = c_array_reverse(utest_fixture->arr);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 16);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[1], 15);
@@ -145,10 +146,10 @@ UTEST_F(CArrayTest, search)
 {
   size_t index;
   int    err = c_array_search(utest_fixture->arr, &(int){13}, cmp, &index);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(index, 1U);
   err = c_array_binary_search(utest_fixture->arr, &(int){13}, cmp, &index);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(index, 1U);
 
   err = c_array_search(utest_fixture->arr, &(int){20}, cmp, &index);
@@ -195,7 +196,7 @@ UTEST_F(CArrayTest, ends_with)
 UTEST_F(CArrayTest, rotate_right)
 {
   int err = c_array_rotate_right(utest_fixture->arr, 3);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 14);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[1], 15);
@@ -207,7 +208,7 @@ UTEST_F(CArrayTest, rotate_right)
 UTEST_F(CArrayTest, rotate_left)
 {
   int err = c_array_rotate_left(utest_fixture->arr, 3);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 15);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[1], 16);
@@ -219,12 +220,12 @@ UTEST_F(CArrayTest, rotate_left)
 UTEST_F(CArrayTest, concatenate)
 {
   CArray* arr2;
-  int     err = c_array_create_with_capacity(sizeof(int), 3, true, &arr2);
-  EXPECT_EQ(err, 0);
+  int     err = c_array_create_with_capacity(sizeof(int), 3, true, NULL, &arr2);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   c_array_fill(arr2, &(int){1});
 
   err = c_array_concatenate(utest_fixture->arr, arr2);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(((int*)utest_fixture->arr->data)[0], 12);
   EXPECT_EQ(((int*)utest_fixture->arr->data)[1], 13);
@@ -241,13 +242,13 @@ UTEST_F(CArrayTest, concatenate)
 UTEST(CArrayTest, general)
 {
   CArray* array2;
-  int     err = c_array_create(sizeof(char), &array2);
-  EXPECT_EQ(err, 0);
+  int     err = c_array_create(sizeof(char), NULL, &array2);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_push(array2, &(char){'\0'});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_insert(array2, &(char){'a'}, 0);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(((char*)array2->data)[0], 'a');
   EXPECT_EQ(((char*)array2->data)[1], '\0');
 
@@ -257,11 +258,11 @@ UTEST(CArrayTest, general)
 UTEST(CArrayTest, wrong_index)
 {
   CArray* array;
-  int     err = c_array_create(sizeof(char), &array);
-  EXPECT_EQ(err, 0);
+  int     err = c_array_create(sizeof(char), NULL, &array);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_push(array, &(char){'\0'});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_insert(array, &(char){'a'}, 1);
   EXPECT_EQ(err, C_ERROR_wrong_index);
 
@@ -271,20 +272,20 @@ UTEST(CArrayTest, wrong_index)
 UTEST(CArrayTest, shrint_to_fit)
 {
   CArray* array;
-  int     err = c_array_create_with_capacity(sizeof(int), 100, true, &array);
-  EXPECT_EQ(err, 0);
+  int err = c_array_create_with_capacity(sizeof(int), 100, true, NULL, &array);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_push(array, &(int){1});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){2});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){3});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){4});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_shrink_to_fit(array);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(c_array_capacity(array), 4U);
   EXPECT_EQ(c_array_len(array), 4U);
@@ -300,28 +301,28 @@ UTEST(CArrayTest, shrint_to_fit)
 UTEST(CArrayTest, dedup)
 {
   CArray* array;
-  int     err = c_array_create_with_capacity(sizeof(int), 100, true, &array);
-  EXPECT_EQ(err, 0);
+  int err = c_array_create_with_capacity(sizeof(int), 100, true, NULL, &array);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_push(array, &(int){1});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){2});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){2});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){3});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){4});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){4});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){4});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_array_push(array, &(int){4});
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_deduplicate(array, cmp);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(c_array_len(array), 4U);
 
@@ -338,11 +339,11 @@ UTEST(CArrayTest, fill)
   size_t const arr_cap = 10;
   int          gt[]    = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
   CArray*      array;
-  int          err = c_array_create(sizeof(int), &array);
-  EXPECT_EQ(err, 0);
+  int          err = c_array_create(sizeof(int), NULL, &array);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_array_set_capacity(array, 10);
-  EXPECT_EQ(err, 0);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(c_array_len(array), 0U);
   c_array_fill(array, &(int){1});
@@ -358,8 +359,9 @@ UTEST(CArrayTest, fill_with_repeat)
   size_t const arr_cap = 10;
   int          gt[]    = {1, 2, 3, 1, 2, 3, 1, 2, 3};
   CArray*      array;
-  int err = c_array_create_with_capacity(sizeof(int), arr_cap, true, &array);
-  EXPECT_EQ(err, 0);
+  int          err
+      = c_array_create_with_capacity(sizeof(int), arr_cap, true, NULL, &array);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(c_array_len(array), 0U);
   c_array_fill_with_repeat(array, (int[]){1, 2, 3}, 3);

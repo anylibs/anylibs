@@ -1,7 +1,8 @@
 /**
- * @file error.c
- * @copyright (C) 2024-2025 Mohamed A. Elmeligy
- * MIT License
+ * @file error.h
+ * @author Mohamed A. Elmeligy
+ * @date 2024-2025
+ * @copyright MIT License
  *
  * Permission is hereby granted, free of charge, to use, copy, modify, and
  * distribute this software, subject to the following conditions:
@@ -40,6 +41,8 @@ c_error_to_str(c_error_t code)
     return "wrong range";
   case C_ERROR_not_found:
     return "not found";
+  case C_ERROR_wrong_alignment:
+    return "wrong alignment";
   default:
     return "";
   }
