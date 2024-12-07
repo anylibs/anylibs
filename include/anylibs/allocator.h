@@ -26,12 +26,6 @@
 
 typedef struct CAllocator CAllocator;
 
-typedef struct CMemory {
-  void*  data;      ///< the allocated data
-  size_t size;      ///< the size of @ref CMemory::data
-  size_t alignment; ///< the alignment of CMemory::data
-} CMemory;
-
 /// Default Allocator
 c_error_t c_allocator_default(CAllocator** out_allocator);
 
@@ -54,9 +48,11 @@ c_error_t c_allocator_alloc(CAllocator* self,
                             size_t      size,
                             size_t      alignment,
                             bool        zero_initialized,
-                            CMemory*    out_memory);
-c_error_t
-     c_allocator_resize(CAllocator* self, CMemory* memory, size_t new_size);
-void c_allocator_free(CAllocator* self, CMemory* memory);
+                            void**      out_memory);
+c_error_t c_allocator_resize(CAllocator* self, void** memory, size_t new_size);
+void      c_allocator_free(CAllocator* self, void** memory);
+
+size_t c_allocator_mem_size(void* memory);
+size_t c_allocator_mem_alignment(void* memory);
 
 #endif // ANYLIBS_ALLOCATOR_H

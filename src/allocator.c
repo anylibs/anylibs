@@ -27,6 +27,21 @@
 #include <stdalign.h>
 #endif
 
+#ifdef _WIN32
+#define c_mem_alloc(size, align) _aligned_malloc((size), (align))
+#define c_mem_resize(mem, old_size, new_size, align)                           \
+  _aligned_realloc(mem, new_size, align)
+#define c_mem_free(mem) _aligned_free(mem)
+#else
+#define c_mem_alloc(size, align) aligned_alloc((align), (size))
+#define c_mem_resize(mem, old_size, new_size, align)                           \
+  c_internal_allocator_default_posix_resize((mem), (old_size), (new_size),     \
+                                            (align))
+#define c_mem_free(mem) free(mem)
+#endif
+
+#define TO_CMEMORY(ptr) ((CMemory*)(ptr) - 1)
+
 typedef struct CAllocator CAllocator;
 typedef struct CAllocatorVTable {
   void* (*alloc)(CAllocator* self, size_t size, size_t align);
@@ -47,18 +62,11 @@ typedef struct CAllocator {
   CAllocatorVTable vtable;
 } CAllocator;
 
-#ifdef _WIN32
-#define c_mem_alloc(size, align) _aligned_malloc((size), (align))
-#define c_mem_resize(mem, old_size, new_size, align)                           \
-  _aligned_realloc(mem, new_size, align)
-#define c_mem_free(mem)
-#else
-#define c_mem_alloc(size, align) aligned_alloc((align), (size))
-#define c_mem_resize(mem, old_size, new_size, align)                           \
-  c_internal_allocator_default_posix_resize((mem), (old_size), (new_size),     \
-                                            (align))
-#define c_mem_free(mem) free(mem)
-#endif
+typedef struct CMemory {
+  size_t size;      ///< the size of @ref CMemory::data
+  size_t alignment; ///< the alignment of CMemory::data
+  char   data[];    ///< the allocated data
+} CMemory;
 
 #ifndef _WIN32
 static void* c_internal_allocator_default_posix_resize(void*  mem,
@@ -196,7 +204,7 @@ c_allocator_alloc(CAllocator* self,
                   size_t      size,
                   size_t      alignment,
                   bool        zero_initialized,
-                  CMemory*    out_memory)
+                  void**      out_memory)
 {
   assert(self);
 
@@ -204,13 +212,15 @@ c_allocator_alloc(CAllocator* self,
   if (!out_memory) return C_ERROR_none;
   if (size % alignment != 0) return C_ERROR_wrong_alignment;
 
-  void* new_mem = self->vtable.alloc(self, size, alignment);
-  if (!new_mem) return C_ERROR_mem_allocation;
+  CMemory* new_memory
+      = self->vtable.alloc(self, size + sizeof(*new_memory), alignment);
+  if (!new_memory) return C_ERROR_mem_allocation;
 
-  if (zero_initialized) memset(new_mem, 0, size);
-  out_memory->data      = new_mem;
-  out_memory->size      = size;
-  out_memory->alignment = alignment;
+  new_memory->size      = size;
+  new_memory->alignment = alignment;
+  if (zero_initialized) memset(new_memory->data, 0, size);
+
+  *out_memory = new_memory->data;
 
   return C_ERROR_none;
 }
@@ -224,18 +234,21 @@ c_allocator_alloc(CAllocator* self,
 /// @param[in] new_size
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_allocator_resize(CAllocator* self, CMemory* memory, size_t new_size)
+c_allocator_resize(CAllocator* self, void** memory, size_t new_size)
 {
   assert(self);
   if (new_size == 0) return C_ERROR_none;
   if (!memory) return C_ERROR_none;
 
-  void* new_mem = self->vtable.resize(self, memory->data, memory->size,
-                                      new_size, memory->alignment);
+  CMemory* old_mem = TO_CMEMORY(*memory);
+
+  CMemory* new_mem
+      = self->vtable.resize(self, old_mem, old_mem->size + sizeof(*old_mem),
+                            new_size + sizeof(*old_mem), old_mem->alignment);
   if (!new_mem) return C_ERROR_mem_allocation;
 
-  memory->data = new_mem;
-  memory->size = new_size;
+  new_mem->size = new_size;
+  *memory       = new_mem->data;
 
   return C_ERROR_none;
 }
@@ -245,14 +258,28 @@ c_allocator_resize(CAllocator* self, CMemory* memory, size_t new_size)
 /// @param[in] self
 /// @param[in] memory
 void
-c_allocator_free(CAllocator* self, CMemory* memory)
+c_allocator_free(CAllocator* self, void** memory)
 {
   assert(self);
 
   if (!memory) return;
 
-  self->vtable.free(self, memory->data);
-  *memory = (CMemory){0};
+  self->vtable.free(self, TO_CMEMORY(*memory));
+  *memory = NULL;
+}
+
+size_t
+c_allocator_mem_size(void* memory)
+{
+  assert(memory);
+  return TO_CMEMORY(memory)->size;
+}
+
+size_t
+c_allocator_mem_alignment(void* memory)
+{
+  assert(memory);
+  return TO_CMEMORY(memory)->alignment;
 }
 
 /******************************************************************************/

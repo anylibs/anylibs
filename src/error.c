@@ -43,6 +43,8 @@ c_error_to_str(c_error_t code)
     return "not found";
   case C_ERROR_wrong_alignment:
     return "wrong alignment";
+  case C_ERROR_raw_data:
+    return "raw data";
   default:
     return "";
   }

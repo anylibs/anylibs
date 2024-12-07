@@ -36,6 +36,7 @@ c_error_t c_vec_create_with_capacity(size_t      element_size,
                                      CAllocator* allocator,
                                      CVec**      out_c_vec);
 
+/// FIXME: this is buggy right now
 c_error_t c_vec_create_from_raw(void*       data,
                                 size_t      data_len,
                                 size_t      element_size,

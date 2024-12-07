@@ -37,11 +37,12 @@
 #define TO_UNITS(vec, bytes) ((bytes) / TO_IMPL(vec)->element_size)
 
 typedef struct CVecImpl {
-  // char*  data;     ///< heap allocated data
-  CMemory     mem; ///< heap allocated data
-  size_t      len; ///< current length, note: this unit based not bytes based
+  void*       data; ///< heap allocated data
+  size_t      len;  ///< current length, note: this unit based not bytes based
   size_t      element_size; ///< size of the unit
   CAllocator* allocator;    ///< memory allocator/deallocator
+  size_t      raw_capacity; ///< this is only useful when used with
+                            ///< @ref c_vec_create_from_raw
 } CVecImpl;
 
 /// @brief intialize a new vec object
@@ -78,26 +79,27 @@ c_vec_create_with_capacity(size_t      element_size,
   if (!out_c_vec) return C_ERROR_none;
   if (!allocator) c_allocator_default(&allocator);
 
-  CMemory   impl_mem = {0}, data_mem = {0};
+  CVecImpl* impl;
+  void*     data_mem;
   c_error_t err = c_allocator_alloc(allocator, c_allocator_alignas(CVecImpl, 1),
-                                    zero_initialized, &impl_mem);
+                                    zero_initialized, (void**)&impl);
   if (err) goto ERROR_ALLOC;
-  CVecImpl* impl = impl_mem.data;
   err = c_allocator_alloc(allocator, capacity * element_size, element_size,
                           zero_initialized, &data_mem);
   if (err) goto ERROR_ALLOC;
 
-  impl->mem          = data_mem;
+  impl->data         = data_mem;
   impl->element_size = element_size;
   impl->len          = 0;
   impl->allocator    = allocator;
+  impl->raw_capacity = 0;
 
   *out_c_vec = FROM_IMPL(impl);
 
   return C_ERROR_none;
 
 ERROR_ALLOC:
-  c_allocator_free(allocator, &impl_mem);
+  c_allocator_free(allocator, (void**)&impl);
   c_allocator_free(allocator, &data_mem);
   return C_ERROR_mem_allocation;
 }
@@ -124,23 +126,23 @@ c_vec_create_from_raw(void*       data,
   if (!out_c_vec) return C_ERROR_none;
   if (!allocator) c_allocator_default(&allocator);
 
-  CMemory   impl_mem = {0};
+  CVecImpl* impl;
   c_error_t err = c_allocator_alloc(allocator, c_allocator_alignas(CVecImpl, 1),
-                                    false, &impl_mem);
+                                    false, (void**)&impl);
   if (err) goto ERROR_ALLOC;
-  CVecImpl* impl = impl_mem.data;
 
-  impl->mem          = (CMemory){.data = data};
+  impl->data         = data;
   impl->element_size = element_size;
   impl->len          = 0;
   impl->allocator    = allocator;
+  impl->raw_capacity = data_len;
 
   *out_c_vec = FROM_IMPL(impl);
 
   return C_ERROR_none;
 
 ERROR_ALLOC:
-  c_allocator_free(allocator, &impl_mem);
+  c_allocator_free(allocator, (void**)&impl);
   return C_ERROR_mem_allocation;
 }
 
@@ -153,17 +155,18 @@ ERROR_ALLOC:
 c_error_t
 c_vec_clone(CVec const* self, bool should_shrink_clone, CVec** out_c_vec)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_c_vec) return C_ERROR_none;
 
   c_error_t err = c_vec_create_with_capacity(
       TO_IMPL(self)->element_size,
-      should_shrink_clone ? TO_IMPL(self)->len
-                          : TO_UNITS(self, TO_IMPL(self)->mem.size),
+      should_shrink_clone
+          ? TO_IMPL(self)->len
+          : TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)),
       false, TO_IMPL(self)->allocator, out_c_vec);
   if (err) return err;
 
-  memcpy(TO_IMPL(*out_c_vec)->mem.data, TO_IMPL(self)->mem.data,
+  memcpy(TO_IMPL(*out_c_vec)->data, TO_IMPL(self)->data,
          TO_BYTES(self, TO_IMPL(self)->len));
   TO_IMPL(*out_c_vec)->len = TO_IMPL(self)->len;
 
@@ -200,10 +203,10 @@ c_vec_len(CVec const* self)
 c_error_t
 c_vec_set_len(CVec* self, size_t new_len)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(new_len > 0);
 
-  if (new_len > TO_UNITS(self, TO_IMPL(self)->mem.size)) {
+  if (new_len > TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data))) {
     c_error_t err = c_vec_set_capacity(self, new_len);
     if (err != C_ERROR_none) return err;
   }
@@ -222,7 +225,7 @@ size_t
 c_vec_capacity(CVec const* self)
 {
   assert(self);
-  return TO_UNITS(self, TO_IMPL(self)->mem.size);
+  return TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data));
 }
 
 /// @brief return the remaining empty space
@@ -232,7 +235,8 @@ size_t
 c_vec_spare_capacity(CVec const* self)
 {
   assert(self);
-  return TO_UNITS(self, TO_IMPL(self)->mem.size) - TO_IMPL(self)->len;
+  return TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data))
+         - TO_IMPL(self)->len;
 }
 
 /// @brief set capacity
@@ -243,11 +247,20 @@ c_vec_spare_capacity(CVec const* self)
 c_error_t
 c_vec_set_capacity(CVec* self, size_t new_capacity)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(new_capacity > 0);
 
+  if (TO_IMPL(self)->raw_capacity > 0) {
+    if (new_capacity <= TO_IMPL(self)->raw_capacity) {
+      TO_IMPL(self)->raw_capacity = new_capacity;
+      return C_ERROR_none;
+    } else {
+      return C_ERROR_capacity_full;
+    }
+  }
+
   c_error_t err
-      = c_allocator_resize(TO_IMPL(self)->allocator, &TO_IMPL(self)->mem,
+      = c_allocator_resize(TO_IMPL(self)->allocator, &TO_IMPL(self)->data,
                            TO_BYTES(self, new_capacity));
   return err;
 }
@@ -282,12 +295,11 @@ c_vec_search(CVec const* self,
              int         cmp(void const*, void const*),
              size_t*     out_index)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
 
   for (size_t iii = 0; iii < TO_IMPL(self)->len; iii++) {
-    if (cmp(element, (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii))
-        == 0) {
+    if (cmp(element, (char*)TO_IMPL(self)->data + TO_BYTES(self, iii)) == 0) {
       *out_index = iii;
       return C_ERROR_none;
     }
@@ -310,16 +322,15 @@ c_vec_binary_search(CVec const* self,
                     int         cmp(void const*, void const*),
                     size_t*     out_index)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
 
-  void* out_element
-      = bsearch(element, TO_IMPL(self)->mem.data, TO_IMPL(self)->len,
-                TO_IMPL(self)->element_size, cmp);
+  void* out_element = bsearch(element, TO_IMPL(self)->data, TO_IMPL(self)->len,
+                              TO_IMPL(self)->element_size, cmp);
 
   if (out_element) {
     *out_index
-        = TO_UNITS(self, (char*)out_element - (char*)TO_IMPL(self)->mem.data);
+        = TO_UNITS(self, (char*)out_element - (char*)TO_IMPL(self)->data);
     return C_ERROR_none;
   } else {
     return C_ERROR_not_found;
@@ -339,14 +350,14 @@ c_vec_starts_with(CVec const* self,
                   size_t      elements_len,
                   int         cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
   if (!cmp) return false;
   if (TO_IMPL(self)->len < elements_len) return false;
 
   for (size_t iii = 0; iii < elements_len; iii++) {
-    if (cmp((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii),
+    if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
             (char*)elements + TO_BYTES(self, iii))
         != 0) {
       return false;
@@ -369,7 +380,7 @@ c_vec_ends_with(CVec const* self,
                 size_t      elements_len,
                 int         cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
   if (!cmp) return false;
@@ -377,7 +388,7 @@ c_vec_ends_with(CVec const* self,
 
   for (size_t iii = TO_IMPL(self)->len - elements_len, jjj = 0;
        iii < TO_IMPL(self)->len; iii++, jjj++) {
-    if (cmp((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii),
+    if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
             (char*)elements + TO_BYTES(self, jjj))
         != 0) {
       return false;
@@ -393,11 +404,11 @@ c_vec_ends_with(CVec const* self,
 void
 c_vec_sort(CVec* self, int cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!cmp) return;
 
-  qsort(TO_IMPL(self)->mem.data, TO_IMPL(self)->len,
-        TO_IMPL(self)->element_size, cmp);
+  qsort(TO_IMPL(self)->data, TO_IMPL(self)->len, TO_IMPL(self)->element_size,
+        cmp);
 }
 
 /// @brief check if sorted or not (in ascending order)
@@ -407,11 +418,11 @@ c_vec_sort(CVec* self, int cmp(void const*, void const*))
 bool
 c_vec_is_sorted(CVec* self, int cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   for (size_t iii = 1; iii < TO_IMPL(self)->len; ++iii) {
-    if (cmp((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii),
-            (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii - 1))
+    if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
+            (char*)TO_IMPL(self)->data + TO_BYTES(self, iii - 1))
         < 0) {
       return false;
     }
@@ -427,11 +438,11 @@ c_vec_is_sorted(CVec* self, int cmp(void const*, void const*))
 bool
 c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   for (size_t iii = 1; iii < TO_IMPL(self)->len; ++iii) {
-    if (cmp((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii),
-            (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii - 1))
+    if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
+            (char*)TO_IMPL(self)->data + TO_BYTES(self, iii - 1))
         > 0) {
       return false;
     }
@@ -448,11 +459,11 @@ c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*))
 c_error_t
 c_vec_get(CVec const* self, size_t index, void** out_element)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!out_element) return C_ERROR_none;
   if (index > TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
-  *out_element = (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, index);
+  *out_element = (char*)TO_IMPL(self)->data + TO_BYTES(self, index);
   return C_ERROR_none;
 }
 
@@ -468,16 +479,17 @@ c_vec_get(CVec const* self, size_t index, void** out_element)
 c_error_t
 c_vec_push(CVec* self, void const* element)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(element);
 
-  if (TO_IMPL(self)->len >= TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err
-        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+  if (TO_IMPL(self)->len
+      >= TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data))) {
+    c_error_t err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) * 2);
     if (err != C_ERROR_none) return err;
   }
 
-  memcpy((uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, TO_IMPL(self)->len),
+  memcpy((uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, TO_IMPL(self)->len),
          element, TO_IMPL(self)->element_size);
   TO_IMPL(self)->len++;
 
@@ -505,7 +517,7 @@ c_vec_push_range(CVec* self, void const* elements, size_t elements_len)
 c_error_t
 c_vec_pop(CVec* self, void* out_element)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   if (TO_IMPL(self)->len == 0) return C_ERROR_wrong_len;
 
@@ -513,14 +525,16 @@ c_vec_pop(CVec* self, void* out_element)
 
   if (out_element) {
     memcpy(out_element,
-           (uint8_t*)TO_IMPL(self)->mem.data
+           (uint8_t*)TO_IMPL(self)->data
                + TO_BYTES(self, TO_IMPL(self)->len - 1U),
            TO_IMPL(self)->element_size);
     TO_IMPL(self)->len--;
   }
 
-  if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+  if (TO_IMPL(self)->len
+      <= TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 4) {
+    err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 2);
   }
 
   return err;
@@ -536,23 +550,24 @@ c_vec_pop(CVec* self, void* out_element)
 c_error_t
 c_vec_insert(CVec* self, void const* element, size_t index)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   if (TO_IMPL(self)->len <= index) return C_ERROR_wrong_index;
 
-  if (TO_IMPL(self)->len == TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err
-        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+  if (TO_IMPL(self)->len
+      == TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data))) {
+    c_error_t err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) * 2);
     if (err != C_ERROR_none) return err;
   }
 
   if (index < TO_IMPL(self)->len) {
-    memmove((uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index + 1),
-            (uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index),
+    memmove((uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index + 1),
+            (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index),
             TO_BYTES(self, TO_IMPL(self)->len - index));
   }
 
-  memcpy((uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index), element,
+  memcpy((uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index), element,
          TO_IMPL(self)->element_size);
   TO_IMPL(self)->len++;
 
@@ -569,27 +584,26 @@ c_vec_insert(CVec* self, void const* element, size_t index)
 c_error_t
 c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   assert(data);
   assert(data_len > 0);
 
   if (TO_IMPL(self)->len < index) return C_ERROR_wrong_index;
 
   while ((TO_IMPL(self)->len + data_len)
-         > TO_UNITS(self, TO_IMPL(self)->mem.size)) {
-    c_error_t err
-        = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) * 2);
+         > TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data))) {
+    c_error_t err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) * 2);
     if (err != C_ERROR_none) return err;
   }
 
   if (index < TO_IMPL(self)->len) {
-    memmove((uint8_t*)TO_IMPL(self)->mem.data
-                + TO_BYTES(self, index + data_len),
-            (uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index),
+    memmove((uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index + data_len),
+            (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index),
             TO_BYTES(self, TO_IMPL(self)->len - index));
   }
 
-  memcpy((uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index), data,
+  memcpy((uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index), data,
          TO_BYTES(self, data_len));
 
   TO_IMPL(self)->len += data_len;
@@ -603,13 +617,14 @@ c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len)
 void
 c_vec_fill(CVec* self, void* data)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!data) return;
 
-  size_t vec_capacity = TO_UNITS(self, TO_IMPL(self)->mem.size);
+  size_t vec_capacity
+      = TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data));
 
   for (size_t iii = 0; iii < vec_capacity; iii++) {
-    memcpy((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, iii), data,
+    memcpy((char*)TO_IMPL(self)->data + TO_BYTES(self, iii), data,
            TO_IMPL(self)->element_size);
   }
   TO_IMPL(self)->len = vec_capacity;
@@ -630,15 +645,14 @@ c_vec_concatenate(CVec* vec1, CVec const* vec2)
   if (TO_IMPL(vec1)->element_size != TO_IMPL(vec2)->element_size)
     return C_ERROR_wrong_element_size;
 
-  if ((TO_IMPL(vec1)->mem.size / TO_IMPL(vec1)->element_size)
+  if ((c_allocator_mem_size(TO_IMPL(vec1)->data) / TO_IMPL(vec1)->element_size)
       < (TO_IMPL(vec1)->len + TO_IMPL(vec2)->len)) {
     err = c_vec_set_capacity(vec1, TO_IMPL(vec1)->len + TO_IMPL(vec2)->len);
     if (err) return err;
   }
 
   memcpy((char*)vec1->data + (TO_IMPL(vec1)->len * TO_IMPL(vec1)->element_size),
-         TO_IMPL(vec2)->mem.data,
-         TO_IMPL(vec2)->len * TO_IMPL(vec2)->element_size);
+         TO_IMPL(vec2)->data, TO_IMPL(vec2)->len * TO_IMPL(vec2)->element_size);
 
   TO_IMPL(vec1)->len += TO_IMPL(vec2)->len;
 
@@ -653,15 +667,15 @@ c_vec_concatenate(CVec* vec1, CVec const* vec2)
 c_error_t
 c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len)
 {
-  assert(self && TO_IMPL(self)->mem.data);
-  if (data_len > TO_UNITS(self, TO_IMPL(self)->mem.size))
+  assert(self && TO_IMPL(self)->data);
+  if (data_len > TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)))
     return C_ERROR_wrong_len;
 
   size_t const number_of_repeats
-      = TO_UNITS(self, TO_IMPL(self)->mem.size) / data_len;
+      = TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / data_len;
   size_t const repeat_size = TO_BYTES(self, data_len);
   for (size_t iii = 0; iii < number_of_repeats; ++iii) {
-    memcpy((char*)TO_IMPL(self)->mem.data + (iii * (repeat_size)), data,
+    memcpy((char*)TO_IMPL(self)->data + (iii * (repeat_size)), data,
            TO_BYTES(self, data_len));
   }
 
@@ -677,24 +691,24 @@ c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len)
 c_error_t
 c_vec_rotate_right(CVec* self, size_t elements_count)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
     return C_ERROR_none;
 
-  CMemory   tmp_mem = {0};
-  c_error_t err     = c_allocator_alloc(
+  void*     tmp_mem;
+  c_error_t err = c_allocator_alloc(
       TO_IMPL(self)->allocator, TO_BYTES(self, elements_count),
       TO_IMPL(self)->element_size, false, &tmp_mem);
   if (err) return err;
 
-  memcpy(tmp_mem.data,
-         (char*)TO_IMPL(self)->mem.data
+  memcpy(tmp_mem,
+         (char*)TO_IMPL(self)->data
              + TO_BYTES(self, TO_IMPL(self)->len - elements_count),
          TO_BYTES(self, elements_count));
 
-  memmove((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, elements_count),
-          TO_IMPL(self)->mem.data, TO_BYTES(self, elements_count));
-  memcpy(TO_IMPL(self)->mem.data, tmp_mem.data, TO_BYTES(self, elements_count));
+  memmove((char*)TO_IMPL(self)->data + TO_BYTES(self, elements_count),
+          TO_IMPL(self)->data, TO_BYTES(self, elements_count));
+  memcpy(TO_IMPL(self)->data, tmp_mem, TO_BYTES(self, elements_count));
 
   c_allocator_free(TO_IMPL(self)->allocator, &tmp_mem);
 
@@ -708,24 +722,24 @@ c_vec_rotate_right(CVec* self, size_t elements_count)
 c_error_t
 c_vec_rotate_left(CVec* self, size_t elements_count)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if ((elements_count == 0) || (elements_count > TO_IMPL(self)->len))
     return C_ERROR_none;
 
-  CMemory   tmp_mem = {0};
-  c_error_t err     = c_allocator_alloc(
+  void*     tmp_mem;
+  c_error_t err = c_allocator_alloc(
       TO_IMPL(self)->allocator, TO_BYTES(self, elements_count),
       TO_IMPL(self)->element_size, false, &tmp_mem);
   if (err) return err;
 
-  memcpy(tmp_mem.data, TO_IMPL(self)->mem.data, TO_BYTES(self, elements_count));
+  memcpy(tmp_mem, TO_IMPL(self)->data, TO_BYTES(self, elements_count));
 
-  memmove(TO_IMPL(self)->mem.data,
-          (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, elements_count),
+  memmove(TO_IMPL(self)->data,
+          (char*)TO_IMPL(self)->data + TO_BYTES(self, elements_count),
           TO_BYTES(self, elements_count));
-  memcpy((char*)TO_IMPL(self)->mem.data
+  memcpy((char*)TO_IMPL(self)->data
              + TO_BYTES(self, TO_IMPL(self)->len - elements_count),
-         tmp_mem.data, TO_BYTES(self, elements_count));
+         tmp_mem, TO_BYTES(self, elements_count));
 
   c_allocator_free(TO_IMPL(self)->allocator, &tmp_mem);
 
@@ -740,20 +754,22 @@ c_vec_rotate_left(CVec* self, size_t elements_count)
 c_error_t
 c_vec_remove(CVec* self, size_t index)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   if (index <= TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
   c_error_t err = C_ERROR_none;
 
-  uint8_t* element = (uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, index);
+  uint8_t* element = (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index);
 
   memmove(element, element + TO_IMPL(self)->element_size,
           TO_BYTES(self, TO_IMPL(self)->len - index - 1));
   TO_IMPL(self)->len--;
 
-  if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+  if (TO_IMPL(self)->len
+      <= TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 4) {
+    err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 2);
   }
 
   return err;
@@ -769,7 +785,7 @@ c_vec_remove(CVec* self, size_t index)
 c_error_t
 c_vec_remove_range(CVec* self, size_t start_index, size_t range_size)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   c_error_t err = C_ERROR_none;
 
@@ -778,8 +794,8 @@ c_vec_remove_range(CVec* self, size_t start_index, size_t range_size)
   if ((start_index + range_size) > TO_IMPL(self)->len) return C_ERROR_wrong_len;
 
   uint8_t* start_ptr
-      = (uint8_t*)TO_IMPL(self)->mem.data + TO_BYTES(self, start_index);
-  uint8_t const* end_ptr = (uint8_t*)TO_IMPL(self)->mem.data
+      = (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, start_index);
+  uint8_t const* end_ptr = (uint8_t*)TO_IMPL(self)->data
                            + TO_BYTES(self, (start_index + range_size));
   size_t right_range_size
       = TO_BYTES(self, TO_IMPL(self)->len - (start_index + range_size));
@@ -787,8 +803,10 @@ c_vec_remove_range(CVec* self, size_t start_index, size_t range_size)
   memmove(start_ptr, end_ptr, right_range_size);
   TO_IMPL(self)->len -= range_size;
 
-  if (TO_IMPL(self)->len <= TO_UNITS(self, TO_IMPL(self)->mem.size) / 4) {
-    err = c_vec_set_capacity(self, TO_UNITS(self, TO_IMPL(self)->mem.size) / 2);
+  if (TO_IMPL(self)->len
+      <= TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 4) {
+    err = c_vec_set_capacity(
+        self, TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data)) / 2);
   }
 
   return err;
@@ -802,19 +820,17 @@ c_vec_remove_range(CVec* self, size_t start_index, size_t range_size)
 c_error_t
 c_vec_deduplicate(CVec* self, int cmp(void const*, void const*))
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   if (!cmp) return C_ERROR_none;
 
   for (size_t iii = 0; iii < TO_IMPL(self)->len; ++iii) {
     for (size_t jjj = iii + 1; jjj < TO_IMPL(self)->len; ++jjj) {
-      if (cmp((char*)TO_IMPL(self)->mem.data
-                  + (TO_IMPL(self)->element_size * iii),
-              (char*)TO_IMPL(self)->mem.data
-                  + (TO_IMPL(self)->element_size * jjj))
+      if (cmp((char*)TO_IMPL(self)->data + (TO_IMPL(self)->element_size * iii),
+              (char*)TO_IMPL(self)->data + (TO_IMPL(self)->element_size * jjj))
           == 0) {
-        memmove((char*)TO_IMPL(self)->mem.data + TO_BYTES(self, jjj),
-                (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, jjj + 1),
+        memmove((char*)TO_IMPL(self)->data + TO_BYTES(self, jjj),
+                (char*)TO_IMPL(self)->data + TO_BYTES(self, jjj + 1),
                 TO_BYTES(self, TO_IMPL(self)->len - jjj + 1));
         TO_IMPL(self)->len--;
         jjj--;
@@ -840,7 +856,7 @@ c_vec_slice(CVec const* self,
             size_t      range,
             CVec**      out_slice)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
   if (start_index > TO_IMPL(self)->len) return C_ERROR_wrong_index;
 
@@ -848,7 +864,7 @@ c_vec_slice(CVec const* self,
       = (TO_IMPL(self)->len - start_index) < range ? TO_IMPL(self)->len : range;
 
   c_error_t err = c_vec_create_from_raw(
-      (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, start_index), range,
+      (char*)TO_IMPL(self)->data + TO_BYTES(self, start_index), range,
       TO_IMPL(self)->element_size, TO_IMPL(self)->allocator, out_slice);
 
   return err;
@@ -863,11 +879,11 @@ c_vec_slice(CVec const* self,
 bool
 c_vec_iter(CVec* self, size_t* index, void** element)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   if (!index || !element) return false;
 
   if (*index < TO_IMPL(self)->len) {
-    *element = (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, *index);
+    *element = (char*)TO_IMPL(self)->data + TO_BYTES(self, *index);
     *index += 1;
     return true;
   }
@@ -880,22 +896,22 @@ c_vec_iter(CVec* self, size_t* index, void** element)
 c_error_t
 c_vec_reverse(CVec* self)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
 
-  char* start = TO_IMPL(self)->mem.data;
+  char* start = TO_IMPL(self)->data;
   char* end
-      = (char*)TO_IMPL(self)->mem.data + TO_BYTES(self, TO_IMPL(self)->len - 1);
+      = (char*)TO_IMPL(self)->data + TO_BYTES(self, TO_IMPL(self)->len - 1);
 
-  CMemory   tmp_mem = {0};
+  void*     tmp_mem;
   c_error_t err
       = c_allocator_alloc(TO_IMPL(self)->allocator, TO_IMPL(self)->element_size,
                           TO_IMPL(self)->element_size, false, &tmp_mem);
   if (err) return err;
 
   while (end > start) {
-    memcpy(tmp_mem.data, start, TO_IMPL(self)->element_size);
+    memcpy(tmp_mem, start, TO_IMPL(self)->element_size);
     memcpy(start, end, TO_IMPL(self)->element_size);
-    memcpy(end, tmp_mem.data, TO_IMPL(self)->element_size);
+    memcpy(end, tmp_mem, TO_IMPL(self)->element_size);
 
     start += TO_IMPL(self)->element_size;
     end -= TO_IMPL(self)->element_size;
@@ -911,7 +927,7 @@ c_vec_reverse(CVec* self)
 void
 c_vec_clear(CVec* self)
 {
-  assert(self && TO_IMPL(self)->mem.data);
+  assert(self && TO_IMPL(self)->data);
   TO_IMPL(self)->len = 0;
 }
 
@@ -921,12 +937,12 @@ c_vec_clear(CVec* self)
 void
 c_vec_destroy(CVec** self)
 {
-  if (self && TO_IMPL(*self)->mem.data) {
+  if (self && TO_IMPL(*self)->data) {
     CAllocator* allocator = TO_IMPL(*self)->allocator;
-    if (TO_IMPL(*self)->mem.size) {
-      c_allocator_free(TO_IMPL(*self)->allocator, &TO_IMPL(*self)->mem);
+    if (TO_IMPL(*self)->raw_capacity == 0) {
+      c_allocator_free(TO_IMPL(*self)->allocator, &TO_IMPL(*self)->data);
     }
-    c_allocator_free(allocator, &(CMemory){.data = *self});
+    c_allocator_free(allocator, (void**)self);
     *self = NULL;
   }
 }
