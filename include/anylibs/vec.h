@@ -114,13 +114,13 @@ c_error_t c_vec_rotate_left(CVec* self, size_t elements_count);
 
 c_error_t c_vec_remove(CVec* self, size_t index);
 
-c_error_t c_vec_remove_range(CVec* self, size_t start_index, size_t range_size);
+c_error_t c_vec_remove_range(CVec* self, size_t start_index, size_t range_len);
 
 c_error_t c_vec_deduplicate(CVec* self, int cmp(void const*, void const*));
 
 c_error_t c_vec_slice(CVec const* self,
                       size_t      start_index,
-                      size_t      range,
+                      size_t      range_len,
                       CVec**      out_slice);
 
 bool c_vec_iter(CVec* self, size_t* index, void** element);
