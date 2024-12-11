@@ -5,4 +5,5 @@ endmacro()
 
 create_test(vec anylibs_src)
 create_test(allocator anylibs_src)
+create_test(iter anylibs_src)
 

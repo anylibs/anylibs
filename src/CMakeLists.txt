@@ -4,5 +4,6 @@ add_library(${PROJECT_NAME}
     vec.c
     error.c
     allocator.c
+    iter.c
 )
 target_link_libraries(${PROJECT_NAME} anylibs)
