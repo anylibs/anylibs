@@ -32,19 +32,22 @@ typedef bool (*CIterStepCallback)(CIter* self,
                                   void** out_element);
 
 struct CIter {
-  size_t current_pos;          ///< this is in units not bytes
-                               /// <(this is according to @ref CIter::step_size)
-  size_t            step_size; ///< this is usually the element size
+  size_t            counter;
+  size_t            step_size;     ///< this is usually the element size
   CIterStepCallback step_callback; ///< this is mainly act like c_iter_next for
                                    ///< whatever the direction
   bool is_reversed;                ///< thiis is true when go backward
   bool is_done; ///< this is used only if @ref CIter::is_reversed is true
 };
 
-c_error_t c_iter_create(size_t            step_size,
-                        bool              is_reversed,
-                        CIterStepCallback step_callback,
-                        CIter*            out_c_iter);
+void c_iter_create(size_t            step_size,
+                   CIterStepCallback step_callback,
+                   CIter*            out_c_iter);
+
+bool c_iter_default_step_callback(CIter* self,
+                                  void*  data,
+                                  size_t data_len,
+                                  void** out_element);
 
 void c_iter_rev(CIter* self, void* data, size_t data_len);
 

@@ -19,47 +19,76 @@
 
 #include <assert.h>
 
-static bool c_internal_iter_next(CIter* self,
-                                 void*  data,
-                                 size_t data_len,
-                                 void** out_element);
-
 /// @brief create an iterator
 /// @param[in] step_size this is usually the type size
-/// @param[in] is_reversed the iterator direction
 /// @param[in] step_callback
 /// @param[out] out_c_iter
-/// @return error (any value but zero is treated as an error)
-c_error_t
+void
 c_iter_create(size_t            step_size,
-              bool              is_reversed,
               CIterStepCallback step_callback,
               CIter*            out_c_iter)
 {
-  if (!out_c_iter) return C_ERROR_none;
+  if (!out_c_iter) return;
 
   *out_c_iter = (CIter){
-      .current_pos   = 0,
-      .is_reversed   = is_reversed,
-      .step_size     = step_size,
-      .is_done       = false,
-      .step_callback = step_callback ? step_callback : c_internal_iter_next,
+      .counter     = 0,
+      .is_reversed = false,
+      .step_size   = step_size,
+      .is_done     = false,
+      .step_callback
+      = step_callback ? step_callback : c_iter_default_step_callback,
   };
+}
 
-  return C_ERROR_none;
+/// @brief this is the default step callback for @ref c_iter_create if @p
+///        step_callback was NULL.
+///        this public for custom step function (filter like) that could also
+///        use this default step function
+/// @param[in] self
+/// @param[in] data
+/// @param[in] data_len
+/// @param[out] out_element
+/// @return the state of the step, false here means could not continue stepping
+bool
+c_iter_default_step_callback(CIter* self,
+                             void*  data,
+                             size_t data_len,
+                             void** out_element)
+{
+  assert(self);
+
+  size_t pos_inc_direction = 1;
+
+  if (self->is_reversed) {
+    if (self->is_done) return false;
+
+    if (!self->counter) self->is_done = true;
+    pos_inc_direction = -1;
+  } else {
+    if (self->counter >= data_len) return false;
+
+    self->is_done = false;
+  }
+
+  if (out_element)
+    *out_element = (uint8_t*)data + (self->counter * self->step_size);
+  self->counter += pos_inc_direction;
+
+  return true;
 }
 
 /// @brief reverse the direction starting from the last element
 /// @param[in] self
 /// @param[in] data
-/// @param data_len
+/// @param[in] data_len
 void
 c_iter_rev(CIter* self, void* data, size_t data_len)
 {
   assert(self);
   (void)data;
 
-  self->current_pos = data_len - 1;
+  self->is_reversed = true;
+  self->counter     = data_len - 1;
 }
 
 /// @brief get the next element
@@ -67,7 +96,7 @@ c_iter_rev(CIter* self, void* data, size_t data_len)
 /// @param[in] data
 /// @param[in] data_len
 /// @param[out] out_element pointer to the next element
-/// @return error (any value but zero is treated as an error)
+/// @return the state of the step, false here means could not continue stepping
 bool
 c_iter_next(CIter* self, void* data, size_t data_len, void** out_element)
 {
@@ -76,7 +105,6 @@ c_iter_next(CIter* self, void* data, size_t data_len, void** out_element)
   return self->step_callback(self, data, data_len, out_element);
 }
 
-#include <stdio.h>
 /// @brief move the iterator to the nth element and return its element
 /// @param[in] self
 /// @param[in] index
@@ -109,14 +137,9 @@ c_iter_nth(
 c_error_t
 c_iter_peek(CIter const* self, void* data, size_t data_len, void** out_element)
 {
-  assert(self);
-  (void)data_len;
-
-  if (self->is_done || (self->current_pos >= data_len))
-    return C_ERROR_wrong_index;
-
-  if (out_element)
-    *out_element = (uint8_t*)data + (self->current_pos * self->step_size);
+  CIter tmp    = *self;
+  bool  status = c_iter_next(&tmp, data, data_len, out_element);
+  if (!status) return C_ERROR_wrong_index;
 
   return C_ERROR_none;
 }
@@ -146,31 +169,3 @@ c_iter_last(CIter* self, void* data, size_t data_len, void** out_element)
 /******************************************************************************/
 /*                                  Internal                                  */
 /******************************************************************************/
-
-bool
-c_internal_iter_next(CIter* self,
-                     void*  data,
-                     size_t data_len,
-                     void** out_element)
-{
-  assert(self);
-
-  size_t pos_inc_direction = 1;
-
-  if (self->is_reversed) {
-    if (self->is_done) return false;
-
-    if (!self->current_pos) self->is_done = true;
-    pos_inc_direction = -1;
-  } else {
-    if (self->current_pos >= data_len) return false;
-
-    self->is_done = false;
-  }
-
-  if (out_element)
-    *out_element = (uint8_t*)data + (self->current_pos * self->step_size);
-  self->current_pos += pos_inc_direction;
-
-  return true;
-}

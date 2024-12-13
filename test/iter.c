@@ -25,8 +25,7 @@ static size_t arr_len = sizeof(arr) / sizeof(*arr);
 UTEST(CIter, next)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), false, NULL, &iter);
-  ASSERT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
 
   int*   data;
   size_t counter = 0;
@@ -38,8 +37,7 @@ UTEST(CIter, next)
 UTEST(CIter, prev)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), true, NULL, &iter);
-  ASSERT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
   c_iter_rev(&iter, arr, arr_len);
 
   int*   data;
@@ -52,11 +50,10 @@ UTEST(CIter, prev)
 UTEST(CIter, nth)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), false, NULL, &iter);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
 
   int* data;
-  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
+  int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   EXPECT_EQ(4, *data);
@@ -65,11 +62,10 @@ UTEST(CIter, nth)
 UTEST(CIter, peek)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), false, NULL, &iter);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
 
   int* data;
-  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
+  int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
   err = c_iter_peek(&iter, arr, arr_len, (void**)&data);
@@ -80,8 +76,7 @@ UTEST(CIter, peek)
 UTEST(CIter, first_last)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), false, NULL, &iter);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
 
   int* data;
   c_iter_first(&iter, arr, arr_len, (void**)&data);
@@ -93,13 +88,11 @@ UTEST(CIter, first_last)
 UTEST(CIter, peek_beyond_last)
 {
   CIter iter;
-  int   err = c_iter_create(sizeof(*arr), false, NULL, &iter);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  c_iter_create(sizeof(*arr), NULL, &iter);
 
   int* data;
   c_iter_last(&iter, arr, arr_len, (void**)&data);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  err = c_iter_peek(&iter, arr, arr_len, (void**)&data);
+  int err = c_iter_peek(&iter, arr, arr_len, (void**)&data);
   EXPECT_EQ(err, C_ERROR_wrong_index);
 }
