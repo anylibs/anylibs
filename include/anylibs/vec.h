@@ -75,12 +75,12 @@ c_error_t c_vec_binary_search(CVec const* self,
                               size_t*     out_index);
 
 bool c_vec_starts_with(CVec const* self,
-                       void*       elements,
+                       void const* elements,
                        size_t      elements_len,
                        int         cmp(void const*, void const*));
 
 bool c_vec_ends_with(CVec const* self,
-                     void*       elements,
+                     void const* elements,
                      size_t      elements_len,
                      int         cmp(void const*, void const*));
 
@@ -97,7 +97,7 @@ c_vec_push_range(CVec* self, void const* elements, size_t elements_len);
 
 c_error_t c_vec_pop(CVec* self, void* out_element);
 
-c_error_t c_vec_insert(CVec* self, void const* element, size_t index);
+c_error_t c_vec_insert(CVec* self, size_t index, void const* element);
 
 c_error_t
 c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len);
@@ -105,6 +105,9 @@ c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len);
 void c_vec_fill(CVec* self, void* data);
 
 c_error_t c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len);
+
+c_error_t c_vec_replace(
+    CVec* self, size_t index, size_t range_len, void* data, size_t data_len);
 
 c_error_t c_vec_concatenate(CVec* vec1, CVec const* vec2);
 
@@ -123,7 +126,9 @@ c_error_t c_vec_slice(CVec const* self,
                       size_t      range_len,
                       CVec**      out_slice);
 
-bool c_vec_iter(CVec* self, size_t* index, void** element);
+void c_vec_iter_create(CVec*             self,
+                       CIterStepCallback step_callback,
+                       CIter*            out_c_iter);
 
 c_error_t c_vec_reverse(CVec* self);
 

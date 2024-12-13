@@ -136,7 +136,7 @@ c_vec_create_from_raw(void*       data,
 
   impl->data         = data;
   impl->element_size = element_size;
-  impl->len          = 0;
+  impl->len          = data_len;
   impl->allocator    = allocator;
   impl->raw_capacity = data_len;
 
@@ -207,14 +207,10 @@ c_vec_set_len(CVec* self, size_t new_len)
   assert(self && TO_IMPL(self)->data);
   assert(new_len > 0);
 
-  new_len *= TO_IMPL(self)->element_size;
-
-  if (new_len > GET_CAPACITY(self)) {
-    c_error_t err = c_vec_set_capacity(self, new_len);
-    if (err != C_ERROR_none) return err;
+  if (TO_BYTES(self, new_len) <= GET_CAPACITY(self)) {
+  TO_IMPL(self)->len = TO_BYTES(self, new_len);
   }
 
-  TO_IMPL(self)->len = TO_BYTES(self, new_len);
   return C_ERROR_none;
 }
 
@@ -261,9 +257,14 @@ c_vec_set_capacity(CVec* self, size_t new_capacity)
     }
   }
 
+  size_t new_len = (TO_BYTES(self, new_capacity) < TO_IMPL(self)->len)
+                       ? TO_BYTES(self, new_capacity)
+                       : TO_IMPL(self)->len;
+
   c_error_t err
       = c_allocator_resize(TO_IMPL(self)->allocator, &TO_IMPL(self)->data,
                            TO_BYTES(self, new_capacity));
+  if (!err) TO_IMPL(self)->len = new_len;
   return err;
 }
 
@@ -349,7 +350,7 @@ c_vec_binary_search(CVec const* self,
 /// @return
 bool
 c_vec_starts_with(CVec const* self,
-                  void*       elements,
+                  void const* elements,
                   size_t      elements_len,
                   int         cmp(void const*, void const*))
 {
@@ -379,7 +380,7 @@ c_vec_starts_with(CVec const* self,
 /// @return
 bool
 c_vec_ends_with(CVec const* self,
-                void*       elements,
+                void const* elements,
                 size_t      elements_len,
                 int         cmp(void const*, void const*))
 {
@@ -544,12 +545,12 @@ c_vec_pop(CVec* self, void* out_element)
 /// @brief insert 1 element at @p index
 /// @note this could reset new reallocated @ref CVecImpl::data
 /// @param[in] self pointer to self
+/// @param[in] index
 /// @param[in] element a pointer the data of size @ref CVecImpl::element_size
 ///                    that you want to push back
-/// @param[in] index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_vec_insert(CVec* self, void const* element, size_t index)
+c_vec_insert(CVec* self, size_t index, void const* element)
 {
   assert(self && TO_IMPL(self)->data);
 
@@ -679,6 +680,26 @@ c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len)
   TO_IMPL(self)->len = TO_BYTES(self, number_of_repeats * data_len);
 
   return C_ERROR_none;
+}
+
+/// @brief replace range start from @p index with @p data
+/// @param[in] self
+/// @param[in] index
+/// @param[in] range_len
+/// @param[in] data
+/// @param[in] data_len
+/// @return error (any value but zero is treated as an error)
+c_error_t
+c_vec_replace(
+    CVec* self, size_t index, size_t range_len, void* data, size_t data_len)
+{
+  /// TODO:
+  assert(false);
+  (void)self;
+  (void)index;
+  (void)range_len;
+  (void)data;
+  (void)data_len;
 }
 
 /// @brief rotate @p elements_count to the right
@@ -870,29 +891,26 @@ c_vec_slice(CVec const* self,
   return err;
 }
 
-/// @brief an iterator to loop over the @ref CVecImpl::data
+/// @brief create an iterator for @ref CVec, check @ref CIter for the definition
+///        and @ref iter.h for other functions
 /// @param[in] self
-/// @param[in] index pointer to a counter index, it will keep count
-///                  till @ref CVecImpl::len
-/// @param[in] element a pointer to the current element
-/// @return bool indicating if we reached the end of the vec
-bool
-c_vec_iter(CVec* self, size_t* index, void** element)
+/// @param[in] step_callback callback needed internally for other Iter
+///                          functions, this could be NULL and it will use
+///                          the default step callback
+/// @param[out] out_c_iter
+void
+c_vec_iter_create(CVec*             self,
+                  CIterStepCallback step_callback,
+                  CIter*            out_c_iter)
 {
-  assert(self && TO_IMPL(self)->data);
-  if (!index || !element) return false;
+  assert(self);
 
-  if (TO_BYTES(self, *index) < TO_IMPL(self)->len) {
-    *element = (char*)TO_IMPL(self)->data + TO_BYTES(self, *index);
-    *index += 1;
-    return true;
-  }
-
-  return false;
+  c_iter_create(TO_IMPL(self)->element_size, step_callback, out_c_iter);
 }
 
 /// @brief reverse the @ref CVecImpl::data in place
 /// @param[in] self
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_vec_reverse(CVec* self)
 {

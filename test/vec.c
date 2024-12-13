@@ -70,7 +70,7 @@ UTEST_F(CVecTest, remove_range)
 
 UTEST_F(CVecTest, insert)
 {
-  int err = c_vec_insert(utest_fixture->vec, &(int){20}, 0);
+  int err = c_vec_insert(utest_fixture->vec, 0, &(int){20});
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(((int*)utest_fixture->vec->data)[0], 20);
   EXPECT_EQ(((int*)utest_fixture->vec->data)[1], 12);
@@ -91,11 +91,14 @@ UTEST_F(CVecTest, insert_range)
 
 UTEST_F(CVecTest, iter)
 {
-  size_t index   = 0;
   size_t counter = 0;
   int*   element;
   int    gt[] = {12, 13, 14, 15, 16};
-  while (c_vec_iter(utest_fixture->vec, &index, (void**)&element)) {
+  CIter  iter;
+  c_vec_iter_create(utest_fixture->vec, NULL, &iter);
+
+  while (c_iter_next(&iter, utest_fixture->vec->data,
+                     c_vec_len(utest_fixture->vec), (void**)&element)) {
     EXPECT_EQ(*element, gt[counter++]);
   }
 }
@@ -245,7 +248,7 @@ UTEST(CVecTest, general)
 
   err = c_vec_push(vec2, &(char){'\0'});
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  err = c_vec_insert(vec2, &(char){'a'}, 0);
+  err = c_vec_insert(vec2, 0, &(char){'a'});
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(((char*)vec2->data)[0], 'a');
   EXPECT_EQ(((char*)vec2->data)[1], '\0');
@@ -261,7 +264,7 @@ UTEST(CVecTest, wrong_index)
 
   err = c_vec_push(vec, &(char){'\0'});
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  err = c_vec_insert(vec, &(char){'a'}, 1);
+  err = c_vec_insert(vec, 1, &(char){'a'});
   EXPECT_EQ(err, C_ERROR_wrong_index);
 
   c_vec_destroy(&vec);
