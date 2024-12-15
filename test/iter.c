@@ -25,7 +25,7 @@ static size_t arr_len = sizeof(arr) / sizeof(*arr);
 UTEST(CIter, next)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
 
   int*   data;
   size_t counter = 0;
@@ -37,7 +37,7 @@ UTEST(CIter, next)
 UTEST(CIter, prev)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
   c_iter_rev(&iter, arr, arr_len);
 
   int*   data;
@@ -50,7 +50,7 @@ UTEST(CIter, prev)
 UTEST(CIter, nth)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
 
   int* data;
   int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
@@ -62,7 +62,7 @@ UTEST(CIter, nth)
 UTEST(CIter, peek)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
 
   int* data;
   int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
@@ -76,7 +76,7 @@ UTEST(CIter, peek)
 UTEST(CIter, first_last)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
 
   int* data;
   c_iter_first(&iter, arr, arr_len, (void**)&data);
@@ -88,7 +88,7 @@ UTEST(CIter, first_last)
 UTEST(CIter, peek_beyond_last)
 {
   CIter iter;
-  c_iter_create(sizeof(*arr), NULL, &iter);
+  c_iter(sizeof(*arr), NULL, &iter);
 
   int* data;
   c_iter_last(&iter, arr, arr_len, (void**)&data);

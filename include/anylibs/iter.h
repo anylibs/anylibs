@@ -40,9 +40,8 @@ struct CIter {
   bool is_done; ///< this is used only if @ref CIter::is_reversed is true
 };
 
-void c_iter_create(size_t            step_size,
-                   CIterStepCallback step_callback,
-                   CIter*            out_c_iter);
+void
+c_iter(size_t step_size, CIterStepCallback step_callback, CIter* out_c_iter);
 
 bool c_iter_default_step_callback(CIter* self,
                                   void*  data,

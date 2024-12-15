@@ -24,9 +24,7 @@
 /// @param[in] step_callback
 /// @param[out] out_c_iter
 void
-c_iter_create(size_t            step_size,
-              CIterStepCallback step_callback,
-              CIter*            out_c_iter)
+c_iter(size_t step_size, CIterStepCallback step_callback, CIter* out_c_iter)
 {
   if (!out_c_iter) return;
 
@@ -40,7 +38,7 @@ c_iter_create(size_t            step_size,
   };
 }
 
-/// @brief this is the default step callback for @ref c_iter_create if @p
+/// @brief this is the default step callback for @ref c_iter if @p
 ///        step_callback was NULL.
 ///        this public for custom step function (filter like) that could also
 ///        use this default step function
