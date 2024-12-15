@@ -16,6 +16,7 @@
  */
 
 #include "anylibs/vec.h"
+#include "internal/vec.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -38,15 +39,6 @@
 #define GET_CAPACITY(vec)                                                      \
   (TO_IMPL(vec)->raw_capacity > 0 ? TO_IMPL(vec)->raw_capacity                 \
                                   : c_allocator_mem_size(TO_IMPL(vec)->data))
-
-typedef struct CVecImpl {
-  void*       data;         ///< heap allocated data
-  size_t      len;          ///< current length in bytes
-  size_t      element_size; ///< size of the element unit
-  CAllocator* allocator;    ///< memory allocator/deallocator
-  size_t      raw_capacity; ///< this is only useful when used with
-                            ///< @ref c_vec_create_from_raw
-} CVecImpl;
 
 /// @brief intialize a new vec object
 /// @param[in] element_size
@@ -136,15 +128,15 @@ c_vec_create_from_raw(void*       data,
   if (!should_copy) {
     c_error_t err = c_allocator_alloc(
         allocator, c_allocator_alignas(CVecImpl, 1), false, (void**)&impl);
-  if (err) goto ERROR_ALLOC;
+    if (err) goto ERROR_ALLOC;
 
-  impl->data         = data;
-  impl->element_size = element_size;
-  impl->len          = data_len;
-  impl->allocator    = allocator;
-  impl->raw_capacity = data_len;
+    impl->data         = data;
+    impl->element_size = element_size;
+    impl->len          = data_len;
+    impl->allocator    = allocator;
+    impl->raw_capacity = data_len;
 
-  *out_c_vec = FROM_IMPL(impl);
+    *out_c_vec = FROM_IMPL(impl);
   } else {
     c_error_t err = c_vec_create_with_capacity(element_size, data_len, false,
                                                allocator, out_c_vec);
@@ -219,7 +211,7 @@ c_vec_set_len(CVec* self, size_t new_len)
   assert(new_len > 0);
 
   if (TO_BYTES(self, new_len) <= GET_CAPACITY(self)) {
-  TO_IMPL(self)->len = TO_BYTES(self, new_len);
+    TO_IMPL(self)->len = TO_BYTES(self, new_len);
   }
 
   return C_ERROR_none;
@@ -307,9 +299,9 @@ c_vec_shrink_to_fit(CVec* self)
 /// @return error (any value but zero is treated as an error)
 c_error_t
 c_vec_find(CVec const* self,
-             void*       element,
-             int         cmp(void const*, void const*),
-             size_t*     out_index)
+           void*       element,
+           int         cmp(void const*, void const*),
+           size_t*     out_index)
 {
   assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
@@ -334,9 +326,9 @@ c_vec_find(CVec const* self,
 /// @return error (any value but zero is treated as an error)
 c_error_t
 c_vec_binary_find(CVec const* self,
-                    void const* element,
-                    int         cmp(void const*, void const*),
-                    size_t*     out_index)
+                  void const* element,
+                  int         cmp(void const*, void const*),
+                  size_t*     out_index)
 {
   assert(self && TO_IMPL(self)->data);
   if (!out_index || !cmp) return C_ERROR_none;
@@ -987,6 +979,18 @@ c_vec_clear(CVec* self)
 {
   assert(self && TO_IMPL(self)->data);
   TO_IMPL(self)->len = 0;
+}
+
+/// @brief convert to str
+/// @param[in] self
+/// @param[out] out_c_str
+/// @return error (any value but zero is treated as an error)
+void
+c_vec_to_str(CVec* self, CString** out_c_str)
+{
+  assert(self);
+
+  if (out_c_str) *out_c_str = (CString*)self;
 }
 
 /// @brief destroy an vec object

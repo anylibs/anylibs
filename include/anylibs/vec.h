@@ -67,14 +67,14 @@ c_error_t c_vec_shrink_to_fit(CVec* self);
 c_error_t c_vec_get(CVec const* self, size_t index, void** out_element);
 
 c_error_t c_vec_find(CVec const* self,
-                       void*       element,
-                       int         cmp(void const*, void const*),
-                       size_t*     out_index);
+                     void*       element,
+                     int         cmp(void const*, void const*),
+                     size_t*     out_index);
 
 c_error_t c_vec_binary_find(CVec const* self,
-                              void const* element,
-                              int         cmp(void const*, void const*),
-                              size_t*     out_index);
+                            void const* element,
+                            int         cmp(void const*, void const*),
+                            size_t*     out_index);
 
 bool c_vec_starts_with(CVec const* self,
                        void const* elements,
@@ -133,6 +133,8 @@ void c_vec_iter(CVec* self, CIterStepCallback step_callback, CIter* out_c_iter);
 c_error_t c_vec_reverse(CVec* self);
 
 void c_vec_clear(CVec* self);
+
+void c_vec_to_str(CVec* self, CString** out_c_str);
 
 void c_vec_destroy(CVec** self);
 #endif // ANYLIBS_VEC_H

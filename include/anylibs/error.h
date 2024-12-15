@@ -36,6 +36,8 @@ typedef enum c_error_t {
   C_ERROR_wrong_alignment,
   C_ERROR_raw_data,
   C_ERROR_invalid_iterator,
+  C_ERROR_invalid_unicode,
+  C_ERROR_none_terminated_raw_str,
 } c_error_t;
 
 char const* c_error_to_str(c_error_t code);

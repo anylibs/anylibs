@@ -45,6 +45,12 @@ c_error_to_str(c_error_t code)
     return "wrong alignment";
   case C_ERROR_raw_data:
     return "raw data";
+  case C_ERROR_invalid_iterator:
+    return "invalid iterator";
+  case C_ERROR_invalid_unicode:
+    return "invalid unicode";
+  case C_ERROR_none_terminated_raw_str:
+    return "none-terminated raw string";
   default:
     return "";
   }
