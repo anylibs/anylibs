@@ -19,32 +19,13 @@
 #define ANYLIBS_STR_H
 
 #include "allocator.h"
+#include "def.h"
 #include "error.h"
 #include "iter.h"
 
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
-
-/// This will solve the security issues related to vsnprintf
-#ifndef ANYLIBS_C_PRINTF
-#if (defined(__GNUC__) || defined(__clang__) || defined(__IAR_SYSTEMS_ICC__))  \
-    && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)              \
-    && !defined(CURL_NO_FMT_CHECKS)
-#if defined(__MINGW32__) && !defined(__clang__)
-#if defined(__MINGW_PRINTF_FORMAT) /* mingw-w64 3.0.0+. Needs stdio.h. */
-#define ANYLIBS_C_PRINTF(fmt, arg)                                             \
-  __attribute__((format(__MINGW_PRINTF_FORMAT, fmt, arg)))
-#else
-#define ANYLIBS_C_PRINTF(fmt, arg)
-#endif
-#else
-#define ANYLIBS_C_PRINTF(fmt, arg) __attribute__((format(printf, fmt, arg)))
-#endif
-#else
-#define ANYLIBS_C_PRINTF(fmt, arg)
-#endif
-#endif
 
 typedef struct CString {
   char* data;
@@ -187,16 +168,11 @@ c_error_t c_str_slice(CString const* self,
 void c_str_iter(CStringIterStepCallback step_callback, CStringIter* out_c_iter);
 
 /// suppress sanitizers error
-#ifdef __has_attribute
-#if __has_attribute(no_sanitize)
-__attribute__((no_sanitize("undefined")))
-#endif
-#endif
-bool
-c_str_iter_default_step_callback(CStringIter* iter,
-                                 char*        data,
-                                 size_t       data_len,
-                                 CChar*       out_char);
+ANYLIBS_C_DISABLE_UNDEFINED
+bool c_str_iter_default_step_callback(CStringIter* iter,
+                                      char*        data,
+                                      size_t       data_len,
+                                      CChar*       out_char);
 
 void c_str_iter_rev(CString const* self, CStringIter* iter);
 
