@@ -7,4 +7,5 @@ create_test(vec anylibs_src)
 create_test(allocator anylibs_src)
 create_test(str anylibs_src)
 create_test(iter anylibs_src)
+create_test(defer anylibs_src)
 
