@@ -208,8 +208,11 @@ c_allocator_alloc(CAllocator* self,
 {
   assert(self);
 
-  if ((size == 0) || (alignment == 0)) return C_ERROR_none;
   if (!out_memory) return C_ERROR_none;
+  if ((size == 0) || (alignment == 0)) {
+    *out_memory = NULL;
+    return C_ERROR_none;
+  }
   if (size % alignment != 0) return C_ERROR_wrong_alignment;
 
   CMemory* new_memory
@@ -237,8 +240,11 @@ c_error_t
 c_allocator_resize(CAllocator* self, void** memory, size_t new_size)
 {
   assert(self);
-  if (new_size == 0) return C_ERROR_none;
   if (!memory) return C_ERROR_none;
+  if (new_size == 0) {
+    c_allocator_free(self, memory);
+    return C_ERROR_none;
+  }
 
   CMemory* old_mem = TO_CMEMORY(*memory);
 

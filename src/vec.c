@@ -112,6 +112,7 @@ ERROR_ALLOC:
 /// @param[in] data
 /// @param[in] data_len this is in @ref CVecImpl::element_size not bytes
 /// @param[in] element_size
+/// @param[in] should_copy true: copy data, false: do not copy data (just ref)
 /// @param[in] allocator the allocator (if NULL the Default Allocator will be
 ///                      used)
 /// @param[out] out_c_vec the result CVec object created
@@ -120,6 +121,7 @@ c_error_t
 c_vec_create_from_raw(void*       data,
                       size_t      data_len,
                       size_t      element_size,
+                      bool        should_copy,
                       CAllocator* allocator,
                       CVec**      out_c_vec)
 {
@@ -130,8 +132,10 @@ c_vec_create_from_raw(void*       data,
   if (!allocator) c_allocator_default(&allocator);
 
   CVecImpl* impl;
-  c_error_t err = c_allocator_alloc(allocator, c_allocator_alignas(CVecImpl, 1),
-                                    false, (void**)&impl);
+
+  if (!should_copy) {
+    c_error_t err = c_allocator_alloc(
+        allocator, c_allocator_alignas(CVecImpl, 1), false, (void**)&impl);
   if (err) goto ERROR_ALLOC;
 
   impl->data         = data;
@@ -141,9 +145,16 @@ c_vec_create_from_raw(void*       data,
   impl->raw_capacity = data_len;
 
   *out_c_vec = FROM_IMPL(impl);
+  } else {
+    c_error_t err = c_vec_create_with_capacity(element_size, data_len, false,
+                                               allocator, out_c_vec);
+    if (err) return err;
+
+    TO_IMPL(*out_c_vec)->len = TO_BYTES(*out_c_vec, data_len);
+    memcpy((*out_c_vec)->data, data, TO_IMPL(*out_c_vec)->len);
+  }
 
   return C_ERROR_none;
-
 ERROR_ALLOC:
   c_allocator_free(allocator, (void**)&impl);
   return C_ERROR_mem_allocation;
@@ -154,7 +165,7 @@ ERROR_ALLOC:
 /// @param[in] self
 /// @param[in] should_shrink_clone
 /// @param[out] out_c_vec
-/// @return
+/// @return error (any value but zero is treated as an error)
 c_error_t
 c_vec_clone(CVec const* self, bool should_shrink_clone, CVec** out_c_vec)
 {
@@ -184,20 +195,20 @@ c_vec_is_empty(CVec const* self)
   return TO_IMPL(self)->len > 0;
 }
 
-/// @brief get vec length
+/// @brief get @ref CVecImpl::len
 /// @param[in] self
-/// @return @ref CVecImpl::len
-size_t
-c_vec_len(CVec const* self)
+/// @param[out] out_len
+void
+c_vec_len(CVec const* self, size_t* out_len)
 {
   assert(self);
-  return TO_UNITS(self, TO_IMPL(self)->len);
+  if (out_len) *out_len = TO_UNITS(self, TO_IMPL(self)->len);
 }
 
 /// @brief set vec length
 ///        this is useful if you want
 ///        to manipulate the data by yourself
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self
 /// @param[in] new_len
 /// @return error (any value but zero is treated as an error)
@@ -214,31 +225,33 @@ c_vec_set_len(CVec* self, size_t new_len)
   return C_ERROR_none;
 }
 
-/// @brief get vec capacity
+/// @brief get @ref CVecImpl::capacity
 ///        this will return the capacity in @ref CVecImpl::element_size wise
 ///        return 'capacity = 10' which means
 ///        we can have up to '10 * element_size' bytes
 /// @param[in] self
-/// @return @ref CVecImpl::capacity
-size_t
-c_vec_capacity(CVec const* self)
+/// @param[out] out_capacity
+void
+c_vec_capacity(CVec const* self, size_t* out_capacity)
 {
   assert(self);
-  return TO_UNITS(self, GET_CAPACITY(self));
+  if (out_capacity) *out_capacity = TO_UNITS(self, GET_CAPACITY(self));
 }
 
 /// @brief return the remaining empty space
 /// @param[in] self
-/// @return the remaining space
-size_t
-c_vec_spare_capacity(CVec const* self)
+/// @param[out] out_spare_capacity
+void
+c_vec_spare_capacity(CVec const* self, size_t* out_spare_capacity)
 {
   assert(self);
-  return TO_UNITS(self, GET_CAPACITY(self) - TO_IMPL(self)->len);
+  if (out_spare_capacity)
+    *out_spare_capacity
+        = TO_UNITS(self, GET_CAPACITY(self) - TO_IMPL(self)->len);
 }
 
 /// @brief set capacity
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self address of self
 /// @param[in] new_capacity
 /// @return error (any value but zero is treated as an error)
@@ -268,13 +281,13 @@ c_vec_set_capacity(CVec* self, size_t new_capacity)
   return err;
 }
 
-/// @brief get elemet_size in bytes
+/// @brief get @ref CVecImpl::element_size in bytes
 /// @param[in] self
-/// @return @ref CVecImpl::element_size
-size_t
-c_vec_element_size(CVec* self)
+/// @param[out] out_element_size
+void
+c_vec_element_size(CVec* self, size_t* out_element_size)
 {
-  return TO_IMPL(self)->element_size;
+  if (out_element_size) *out_element_size = TO_IMPL(self)->element_size;
 }
 
 /// @brief make the @ref CVecImpl::capacity equals @ref CVecImpl::len
@@ -293,7 +306,7 @@ c_vec_shrink_to_fit(CVec* self)
 /// @param[out] out_index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_vec_search(CVec const* self,
+c_vec_find(CVec const* self,
              void*       element,
              int         cmp(void const*, void const*),
              size_t*     out_index)
@@ -312,7 +325,7 @@ c_vec_search(CVec const* self,
 }
 
 /// @brief search for @p element using binary search tree
-/// @note  If @ref CVecImpl::data is not sorted, the returned result is
+/// @note  If @ref CVec::data is not sorted, the returned result is
 ///        unspecified and meaningless
 /// @param[in] self
 /// @param[in] element
@@ -320,7 +333,7 @@ c_vec_search(CVec const* self,
 /// @param[out] out_index
 /// @return error (any value but zero is treated as an error)
 c_error_t
-c_vec_binary_search(CVec const* self,
+c_vec_binary_find(CVec const* self,
                     void const* element,
                     int         cmp(void const*, void const*),
                     size_t*     out_index)
@@ -342,7 +355,7 @@ c_vec_binary_search(CVec const* self,
 }
 
 /// @brief check if @p elements is the same as the start elements
-///        of @ref CVecImpl::data
+///        of @ref CVec::data
 /// @param[in] self
 /// @param[in] elements
 /// @param[in] elements_len
@@ -372,7 +385,7 @@ c_vec_starts_with(CVec const* self,
 }
 
 /// @brief check if @p elements is the same as the end elements
-///        of @ref CVecImpl::data
+///        of @ref CVec::data
 /// @param[in] self
 /// @param[in] elements
 /// @param[in] elements_len
@@ -474,7 +487,7 @@ c_vec_get(CVec const* self, size_t index, void** out_element)
 /// @brief push one element at the end
 ///        if you want to push literals (example: 3, 5 or 10 ...)
 ///        c_vec_push(vec, &(int){3});
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @note this will COPY @p element
 /// @param[in] self pointer to self
 /// @param[in] element a pointer the data of size @ref CVecImpl::element_size
@@ -500,7 +513,7 @@ c_vec_push(CVec* self, void const* element)
 }
 
 /// @brief push elements at the end of @ref CVecImpl
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @note this will COPY @p element
 /// @param[in] self
 /// @param[in] elements
@@ -514,7 +527,7 @@ c_vec_push_range(CVec* self, void const* elements, size_t elements_len)
 }
 
 /// @brief pop one element from the end
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self
 /// @param[out] out_element the returned result
 /// @return error (any value but zero is treated as an error)
@@ -543,7 +556,7 @@ c_vec_pop(CVec* self, void* out_element)
 }
 
 /// @brief insert 1 element at @p index
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self pointer to self
 /// @param[in] index
 /// @param[in] element a pointer the data of size @ref CVecImpl::element_size
@@ -576,7 +589,7 @@ c_vec_insert(CVec* self, size_t index, void const* element)
 }
 
 /// @brief insert multiple elements at index
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self
 /// @param[in] index
 /// @param[in] data
@@ -629,7 +642,7 @@ c_vec_fill(CVec* self, void* data)
   TO_IMPL(self)->len = TO_BYTES(self, vec_capacity);
 }
 
-/// @brief concatenate vec2 @ref CVecImpl::data to vec1 @ref CVecImpl::data
+/// @brief concatenate vec2 @ref CVec::data to vec1 @ref CVec::data
 /// @param[in] vec1
 /// @param[in] vec2
 /// @return error (any value but zero is treated as an error)
@@ -658,7 +671,7 @@ c_vec_concatenate(CVec* vec1, CVec const* vec2)
   return err;
 }
 
-/// @brief fill @ref CVecImpl::data with repeated @p data
+/// @brief fill @ref CVec::data with repeated @p data
 /// @param[in] self
 /// @param[in] data
 /// @param[in] data_len this is in @ref CVecImpl::element_size not bytes
@@ -693,13 +706,42 @@ c_error_t
 c_vec_replace(
     CVec* self, size_t index, size_t range_len, void* data, size_t data_len)
 {
-  /// TODO:
-  assert(false);
-  (void)self;
-  (void)index;
-  (void)range_len;
-  (void)data;
-  (void)data_len;
+  assert(self && self->data);
+
+  if (range_len == 0 || !data || data_len == 0) return C_ERROR_none;
+
+  c_error_t err          = C_ERROR_none;
+  size_t    len_as_units = TO_UNITS(self, TO_IMPL(self)->len);
+  size_t    cap_as_units
+      = TO_UNITS(self, c_allocator_mem_size(TO_IMPL(self)->data));
+
+  if ((index + range_len) >= len_as_units) range_len = len_as_units - index;
+
+  /// enlarge if needed
+  if ((len_as_units - range_len + data_len + 1) > cap_as_units) {
+    cap_as_units -= range_len - data_len;
+    err = c_vec_set_capacity(self, cap_as_units);
+    if (err) return err;
+  }
+
+  if (data_len < range_len || data_len > range_len) {
+    memmove((uint8_t*)(self->data) + TO_BYTES(self, index + data_len),
+            (uint8_t*)(self->data) + TO_BYTES(self, index + range_len),
+            TO_BYTES(self, len_as_units - (range_len + index)));
+    len_as_units -= range_len;
+    len_as_units += data_len;
+    TO_IMPL(self)->len = TO_BYTES(self, len_as_units);
+
+    /// shrink if needed
+    if ((len_as_units > 0) && (len_as_units <= cap_as_units / 4)) {
+      err = c_vec_set_capacity(self, cap_as_units / 2);
+    }
+  }
+
+  memcpy((uint8_t*)self->data + TO_BYTES(self, index), data,
+         TO_BYTES(self, data_len));
+
+  return err;
 }
 
 /// @brief rotate @p elements_count to the right
@@ -767,7 +809,7 @@ c_vec_rotate_left(CVec* self, size_t elements_count)
 }
 
 /// @brief remove element from CVec
-/// @note this could reset new reallocated @ref CVecImpl::data
+/// @note this could reallocate @ref CVec::data
 /// @param[in] self
 /// @param[in] index index to be removed
 /// @return error (any value but zero is treated as an error)
@@ -886,7 +928,7 @@ c_vec_slice(CVec const* self,
 
   c_error_t err = c_vec_create_from_raw(
       (char*)TO_IMPL(self)->data + TO_BYTES(self, start_index), range_len,
-      TO_IMPL(self)->element_size, TO_IMPL(self)->allocator, out_slice);
+      TO_IMPL(self)->element_size, false, TO_IMPL(self)->allocator, out_slice);
 
   return err;
 }
@@ -899,16 +941,14 @@ c_vec_slice(CVec const* self,
 ///                          the default step callback
 /// @param[out] out_c_iter
 void
-c_vec_iter_create(CVec*             self,
-                  CIterStepCallback step_callback,
-                  CIter*            out_c_iter)
+c_vec_iter(CVec* self, CIterStepCallback step_callback, CIter* out_c_iter)
 {
   assert(self);
 
-  c_iter_create(TO_IMPL(self)->element_size, step_callback, out_c_iter);
+  c_iter(TO_IMPL(self)->element_size, step_callback, out_c_iter);
 }
 
-/// @brief reverse the @ref CVecImpl::data in place
+/// @brief reverse the @ref CVec::data in place
 /// @param[in] self
 /// @return error (any value but zero is treated as an error)
 c_error_t

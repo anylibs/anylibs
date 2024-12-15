@@ -18,6 +18,10 @@
 #ifndef ANYLIBS_ERROR_H
 #define ANYLIBS_ERROR_H
 
+/// @brief usually this the return for any function inside anylibs.
+///        if any code return beside @ref c_error_t::C_ERROR_none, the return
+///        values (that usually return also as a pointer through parameters)
+///        will be in an invalid state, using these value is undefined behavior
 typedef enum c_error_t {
   C_ERROR_none,
   C_ERROR_mem_allocation = 256,
@@ -31,6 +35,7 @@ typedef enum c_error_t {
   C_ERROR_not_found,
   C_ERROR_wrong_alignment,
   C_ERROR_raw_data,
+  C_ERROR_invalid_iterator,
 } c_error_t;
 
 char const* c_error_to_str(c_error_t code);

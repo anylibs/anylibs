@@ -22,10 +22,12 @@
 
 #include "allocator.h"
 #include "error.h"
+#include "iter.h"
 
 typedef struct CVec {
   void* data; ///< heap allocated data
 } CVec;
+typedef struct CString CString;
 
 c_error_t
 c_vec_create(size_t element_size, CAllocator* allocator, CVec** out_c_vec);
@@ -36,10 +38,10 @@ c_error_t c_vec_create_with_capacity(size_t      element_size,
                                      CAllocator* allocator,
                                      CVec**      out_c_vec);
 
-/// FIXME: this is buggy right now
 c_error_t c_vec_create_from_raw(void*       data,
                                 size_t      data_len,
                                 size_t      element_size,
+                                bool        should_copy,
                                 CAllocator* allocator,
                                 CVec**      out_c_vec);
 
@@ -48,28 +50,28 @@ c_vec_clone(CVec const* self, bool should_shrink_clone, CVec** out_c_vec);
 
 bool c_vec_is_empty(CVec const* self);
 
-size_t c_vec_len(CVec const* self);
+void c_vec_len(CVec const* self, size_t* out_len);
 
 c_error_t c_vec_set_len(CVec* self, size_t new_len);
 
-size_t c_vec_capacity(CVec const* self);
+void c_vec_capacity(CVec const* self, size_t* out_capacity);
 
-size_t c_vec_spare_capacity(CVec const* self);
+void c_vec_spare_capacity(CVec const* self, size_t* out_spare_capacity);
 
 c_error_t c_vec_set_capacity(CVec* self, size_t new_capacity);
 
-size_t c_vec_element_size(CVec* self);
+void c_vec_element_size(CVec* self, size_t* element_size);
 
 c_error_t c_vec_shrink_to_fit(CVec* self);
 
 c_error_t c_vec_get(CVec const* self, size_t index, void** out_element);
 
-c_error_t c_vec_search(CVec const* self,
+c_error_t c_vec_find(CVec const* self,
                        void*       element,
                        int         cmp(void const*, void const*),
                        size_t*     out_index);
 
-c_error_t c_vec_binary_search(CVec const* self,
+c_error_t c_vec_binary_find(CVec const* self,
                               void const* element,
                               int         cmp(void const*, void const*),
                               size_t*     out_index);
@@ -126,9 +128,7 @@ c_error_t c_vec_slice(CVec const* self,
                       size_t      range_len,
                       CVec**      out_slice);
 
-void c_vec_iter_create(CVec*             self,
-                       CIterStepCallback step_callback,
-                       CIter*            out_c_iter);
+void c_vec_iter(CVec* self, CIterStepCallback step_callback, CIter* out_c_iter);
 
 c_error_t c_vec_reverse(CVec* self);
 

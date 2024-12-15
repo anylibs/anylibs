@@ -43,7 +43,10 @@ UTEST_F_SETUP(CVecTest)
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   err = c_vec_push(utest_fixture->vec, &(int){16});
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  EXPECT_EQ(c_vec_len(utest_fixture->vec), 5U);
+
+  size_t vec_len;
+  c_vec_len(utest_fixture->vec, &vec_len);
+  EXPECT_EQ(vec_len, 5U);
 }
 
 UTEST_F_TEARDOWN(CVecTest)
@@ -62,9 +65,12 @@ UTEST_F(CVecTest, pop)
 
 UTEST_F(CVecTest, remove_range)
 {
-  int err = c_vec_remove_range(utest_fixture->vec, 1U, 3U);
+  size_t vec_len;
+  int    err = c_vec_remove_range(utest_fixture->vec, 1U, 3U);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  EXPECT_EQ(c_vec_len(utest_fixture->vec), 2U);
+
+  c_vec_len(utest_fixture->vec, &vec_len);
+  EXPECT_EQ(2U, vec_len);
   EXPECT_EQ(((int*)utest_fixture->vec->data)[0], 12);
 }
 
@@ -80,7 +86,10 @@ UTEST_F(CVecTest, insert_range)
 {
   int err = c_vec_insert_range(utest_fixture->vec, 1, &(int[]){1, 2, 3}, 3);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  EXPECT_EQ(c_vec_len(utest_fixture->vec), 8U);
+
+  size_t vec_len;
+  c_vec_len(utest_fixture->vec, &vec_len);
+  EXPECT_EQ(8U, vec_len);
 
   EXPECT_EQ(((int*)utest_fixture->vec->data)[0], 12);
   EXPECT_EQ(((int*)utest_fixture->vec->data)[1], 1);
@@ -95,10 +104,12 @@ UTEST_F(CVecTest, iter)
   int*   element;
   int    gt[] = {12, 13, 14, 15, 16};
   CIter  iter;
-  c_vec_iter_create(utest_fixture->vec, NULL, &iter);
+  c_vec_iter(utest_fixture->vec, NULL, &iter);
 
-  while (c_iter_next(&iter, utest_fixture->vec->data,
-                     c_vec_len(utest_fixture->vec), (void**)&element)) {
+  size_t vec_len;
+  c_vec_len(utest_fixture->vec, &vec_len);
+  while (
+      c_iter_next(&iter, utest_fixture->vec->data, vec_len, (void**)&element)) {
     EXPECT_EQ(*element, gt[counter++]);
   }
 }
@@ -122,11 +133,25 @@ UTEST_F(CVecTest, clone)
   int   err = c_vec_clone(utest_fixture->vec, true, &clone);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  EXPECT_EQ(c_vec_len(clone), c_vec_len(utest_fixture->vec));
-  EXPECT_EQ(c_vec_capacity(clone), c_vec_len(utest_fixture->vec));
-  EXPECT_EQ(c_vec_element_size(clone), c_vec_element_size(utest_fixture->vec));
+  // vec length
+  size_t vec_len, vec_clone_len;
+  c_vec_len(utest_fixture->vec, &vec_len);
+  c_vec_len(clone, &vec_clone_len);
+  EXPECT_EQ(vec_len, vec_clone_len);
 
-  EXPECT_EQ(memcmp(utest_fixture->vec->data, clone->data, c_vec_len(clone)), 0);
+  // vec capacity
+  size_t vec_capacity, vec_clone_capacity;
+  c_vec_capacity(utest_fixture->vec, &vec_capacity);
+  c_vec_capacity(clone, &vec_clone_capacity);
+  EXPECT_NE(vec_capacity, vec_clone_capacity);
+
+  // vec element size
+  size_t vec_element_size, vec_clone_element_size;
+  c_vec_element_size(utest_fixture->vec, &vec_element_size);
+  c_vec_element_size(clone, &vec_clone_element_size);
+  EXPECT_EQ(vec_element_size, vec_clone_element_size);
+
+  EXPECT_EQ(memcmp(utest_fixture->vec->data, clone->data, vec_clone_len), 0);
 
   c_vec_destroy(&clone);
 }
@@ -146,16 +171,16 @@ UTEST_F(CVecTest, reverse)
 UTEST_F(CVecTest, search)
 {
   size_t index;
-  int    err = c_vec_search(utest_fixture->vec, &(int){13}, cmp, &index);
+  int    err = c_vec_find(utest_fixture->vec, &(int){13}, cmp, &index);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(index, 1U);
-  err = c_vec_binary_search(utest_fixture->vec, &(int){13}, cmp, &index);
+  err = c_vec_binary_find(utest_fixture->vec, &(int){13}, cmp, &index);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
   EXPECT_EQ(index, 1U);
 
-  err = c_vec_search(utest_fixture->vec, &(int){20}, cmp, &index);
+  err = c_vec_find(utest_fixture->vec, &(int){20}, cmp, &index);
   EXPECT_NE(err, 0);
-  err = c_vec_binary_search(utest_fixture->vec, &(int){20}, cmp, &index);
+  err = c_vec_binary_find(utest_fixture->vec, &(int){20}, cmp, &index);
   EXPECT_NE(err, 0);
 }
 
@@ -240,7 +265,7 @@ UTEST_F(CVecTest, concatenate)
   c_vec_destroy(&vec2);
 }
 
-UTEST(CVecTest, general)
+UTEST(CVec, general)
 {
   CVec* vec2;
   int   err = c_vec_create(sizeof(char), NULL, &vec2);
@@ -256,7 +281,7 @@ UTEST(CVecTest, general)
   c_vec_destroy(&vec2);
 }
 
-UTEST(CVecTest, wrong_index)
+UTEST(CVec, wrong_index)
 {
   CVec* vec;
   int   err = c_vec_create(sizeof(char), NULL, &vec);
@@ -270,7 +295,7 @@ UTEST(CVecTest, wrong_index)
   c_vec_destroy(&vec);
 }
 
-UTEST(CVecTest, shrint_to_fit)
+UTEST(CVec, shrint_to_fit)
 {
   CVec* vec;
   int   err = c_vec_create_with_capacity(sizeof(int), 100, true, NULL, &vec);
@@ -288,8 +313,13 @@ UTEST(CVecTest, shrint_to_fit)
   err = c_vec_shrink_to_fit(vec);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  EXPECT_EQ(c_vec_capacity(vec), 4U);
-  EXPECT_EQ(c_vec_len(vec), 4U);
+  size_t vec_len;
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(4U, vec_len);
+
+  size_t vec_capacity;
+  c_vec_capacity(vec, &vec_capacity);
+  EXPECT_EQ(4U, vec_capacity);
 
   EXPECT_EQ(((int*)vec->data)[0], 1);
   EXPECT_EQ(((int*)vec->data)[1], 2);
@@ -299,7 +329,7 @@ UTEST(CVecTest, shrint_to_fit)
   c_vec_destroy(&vec);
 }
 
-UTEST(CVecTest, dedup)
+UTEST(CVec, dedup)
 {
   CVec* vec;
   int   err = c_vec_create_with_capacity(sizeof(int), 100, true, NULL, &vec);
@@ -325,7 +355,9 @@ UTEST(CVecTest, dedup)
   err = c_vec_deduplicate(vec, cmp);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  EXPECT_EQ(c_vec_len(vec), 4U);
+  size_t vec_len;
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(4U, vec_len);
 
   EXPECT_EQ(((int*)vec->data)[0], 1);
   EXPECT_EQ(((int*)vec->data)[1], 2);
@@ -335,7 +367,7 @@ UTEST(CVecTest, dedup)
   c_vec_destroy(&vec);
 }
 
-UTEST(CVecTest, fill)
+UTEST(CVec, fill)
 {
   size_t const vec_cap = 10;
   int          gt[]    = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
@@ -346,29 +378,88 @@ UTEST(CVecTest, fill)
   err = c_vec_set_capacity(vec, 10);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  EXPECT_EQ(c_vec_len(vec), 0U);
+  size_t vec_len;
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(0U, vec_len);
   c_vec_fill(vec, &(int){1});
-  EXPECT_EQ(c_vec_len(vec), 10U);
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(10U, vec_len);
 
   EXPECT_EQ(memcmp(vec->data, gt, vec_cap), 0);
 
   c_vec_destroy(&vec);
 }
 
-UTEST(CVecTest, fill_with_repeat)
+UTEST(CVec, fill_with_repeat)
 {
   size_t const vec_cap = 10;
-  int          gt[]    = {1, 2, 3, 1, 2, 3, 1, 2, 3};
+  int const    gt[]    = {1, 2, 3, 1, 2, 3, 1, 2, 3};
   CVec*        vec;
   int err = c_vec_create_with_capacity(sizeof(int), vec_cap, true, NULL, &vec);
   EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
 
-  EXPECT_EQ(c_vec_len(vec), 0U);
+  size_t vec_len;
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(0U, vec_len);
+
   c_vec_fill_with_repeat(vec, (int[]){1, 2, 3}, 3);
-  EXPECT_EQ(c_vec_len(vec), 9U);
-  EXPECT_EQ(c_vec_capacity(vec), 10U);
+
+  c_vec_len(vec, &vec_len);
+  EXPECT_EQ(9U, vec_len);
+
+  size_t vec_capacity;
+  c_vec_capacity(vec, &vec_capacity);
+  EXPECT_EQ(10U, vec_capacity);
 
   EXPECT_EQ(memcmp(vec->data, gt, vec_cap), 0);
+
+  c_vec_destroy(&vec);
+}
+
+UTEST(CVec, replace)
+{
+  CVec* vec;
+  int   err = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
+                                    sizeof(int), true, NULL, &vec);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  int const gt[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+  err = c_vec_replace(vec, 2, 2, (int[]){3, 4}, 2);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+
+  EXPECT_EQ(0, memcmp(gt, vec->data, sizeof(gt)));
+
+  c_vec_destroy(&vec);
+}
+
+UTEST(CVec, replace_with_smaller_data)
+{
+  CVec* vec;
+  int   err = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
+                                    sizeof(int), true, NULL, &vec);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  int const gt[] = {1, 2, 3, 5, 6, 7, 8, 9, 0};
+
+  err = c_vec_replace(vec, 2, 2, (int[]){3}, 1);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+
+  EXPECT_EQ(0, memcmp(gt, vec->data, sizeof(gt)));
+
+  c_vec_destroy(&vec);
+}
+
+UTEST(CVec, replace_with_larger_data)
+{
+  CVec* vec;
+  int   err = c_vec_create_from_raw((int[]){1, 2, 0, 0, 7, 8, 9, 0}, 8,
+                                    sizeof(int), true, NULL, &vec);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  int const gt[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
+
+  err = c_vec_replace(vec, 2, 2, (int[]){3, 4, 5, 6}, 4);
+  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+
+  EXPECT_EQ(0, memcmp(gt, vec->data, sizeof(gt)));
 
   c_vec_destroy(&vec);
 }
