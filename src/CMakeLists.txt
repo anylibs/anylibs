@@ -6,5 +6,6 @@ add_library(${PROJECT_NAME}
     allocator.c
     str.c
     iter.c
+    dl_loader.c
 )
 target_link_libraries(${PROJECT_NAME} anylibs)

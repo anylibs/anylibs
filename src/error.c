@@ -51,6 +51,10 @@ c_error_to_str(c_error_t code)
     return "invalid unicode";
   case C_ERROR_none_terminated_raw_str:
     return "none-terminated raw string";
+  case C_ERROR_dl_loader_failed:
+    return "dl_loader failed";
+  case C_ERROR_dl_loader_invalid_symbol:
+    return "dl_loader invalid symbol";
   default:
     return "";
   }

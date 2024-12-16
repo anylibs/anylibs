@@ -38,6 +38,8 @@ typedef enum c_error_t {
   C_ERROR_invalid_iterator,
   C_ERROR_invalid_unicode,
   C_ERROR_none_terminated_raw_str,
+  C_ERROR_dl_loader_failed,
+  C_ERROR_dl_loader_invalid_symbol,
 } c_error_t;
 
 char const* c_error_to_str(c_error_t code);
