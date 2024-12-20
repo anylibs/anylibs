@@ -97,181 +97,169 @@ static CAllocator c_allocator_default__ = {
 /// Allocators
 /// @brief get the default allocator (it will use (malloc, free, ...) family)
 /// @note this will never return error, it made like that only for consistency
-/// @param[out] out_allocator
-/// @return error (any value but zero is treated as an error)
-c_error_t
-c_allocator_default(CAllocator** out_allocator)
+/// @return allocator that wraps malloc/free
+CAllocator*
+c_allocator_default(void)
 {
-  if (out_allocator) *out_allocator = &c_allocator_default__;
-  return C_ERROR_none;
+  return &c_allocator_default__;
 }
 
-/// Arena
+///--------------------------------- Arena --------------------------------- ///
 
 /// @brief create arena allocator (this is a fixed big memory allocation that
 ///        you can use @ref CAllocator::main_mem::buf for smaller allocations
 ///        and at the end free the whole arena all at once)
-/// @param[in] capacity
-/// @param[out] out_allocator
-/// @return error (any value but zero is treated as an error)
-c_error_t
-c_allocator_arena_create(size_t capacity, CAllocator** out_allocator)
+/// @param capacity
+/// @return arena allocator or NULL on error
+CAllocator*
+c_allocator_arena_create(size_t capacity)
 {
-  if (!out_allocator) return C_ERROR_none;
+  CAllocator* allocator = malloc(sizeof(CAllocator));
+  if (!allocator) return NULL;
 
-  *out_allocator = malloc(sizeof(CAllocator));
-  if (!*out_allocator) return C_ERROR_mem_allocation;
+  allocator->main_mem.buf = malloc(capacity);
+  if (!allocator->main_mem.buf) {
+    free(allocator);
+    return NULL;
+  }
 
-  (*out_allocator)->main_mem.buf = malloc(capacity);
-  if (!(*out_allocator)->main_mem.buf) return C_ERROR_mem_allocation;
-  (*out_allocator)->main_mem.capacity     = capacity;
-  (*out_allocator)->main_mem.current_size = 0;
-  (*out_allocator)->vtable
+  allocator->main_mem.capacity     = capacity;
+  allocator->main_mem.current_size = 0;
+  allocator->vtable
       = (CAllocatorVTable){.alloc  = c_internal_allocator_arena_alloc,
                            .resize = c_internal_allocator_arena_resize,
                            .free   = c_internal_allocator_arena_free};
 
-  return C_ERROR_none;
+  return allocator;
 }
 
-/// @brief
+/// @brief destroy the memory hold by the arena
 /// @note this could handle self as NULL
-/// @param[in] self
+/// @param self
 void
-c_allocator_arena_destroy(CAllocator** self)
+c_allocator_arena_destroy(CAllocator* self)
 {
-  if (self && *self) {
-    free((*self)->main_mem.buf);
-    **self = (CAllocator){0};
-    free(*self);
-    *self = NULL;
+  if (self) {
+    free(self->main_mem.buf);
+    *self = (CAllocator){0};
+    free(self);
   }
 }
 
-/// Fixed buffer
+///----------------------------- Fixed buffer ----------------------------- ///
 
 /// @brief craete fixed buffer allocator (it is the same like arena, but you
 ///        will provide the memory to be used instead of allocating one)
-/// @param[in] buffer this will be used as a big memory like the arena
-/// @param[in] buffer_size the memory capacity
-/// @param[out] out_allocator
-/// @return error (any value but zero is treated as an error)
-c_error_t
-c_allocator_fixed_buffer_create(void*        buffer,
-                                size_t       buffer_size,
-                                CAllocator** out_allocator)
+/// @param buffer this will be used as a big memory like the arena
+/// @param buffer_size the memory capacity
+/// @return fixed buffer allocator or NULL on error
+CAllocator*
+c_allocator_fixed_buffer_create(void* buffer, size_t buffer_size)
 {
-  if (!out_allocator) return C_ERROR_none;
+  CAllocator* allocator = malloc(sizeof(CAllocator));
+  if (!allocator) return NULL;
 
-  *out_allocator = malloc(sizeof(CAllocator));
-  if (!*out_allocator) return C_ERROR_mem_allocation;
-
-  (*out_allocator)->main_mem.buf          = buffer;
-  (*out_allocator)->main_mem.capacity     = buffer_size;
-  (*out_allocator)->main_mem.current_size = 0;
-  (*out_allocator)->vtable
+  allocator->main_mem.buf          = buffer;
+  allocator->main_mem.capacity     = buffer_size;
+  allocator->main_mem.current_size = 0;
+  allocator->vtable
       = (CAllocatorVTable){.alloc  = c_internal_allocator_fixed_buffer_alloc,
                            .resize = c_internal_allocator_fixed_buffer_resize,
                            .free   = c_internal_allocator_fixed_buffer_free};
 
-  return C_ERROR_none;
+  return allocator;
 }
 
-/// @brief
+/// @brief destroy the fixed buffer allocator
 /// @note this could handle self as NULL
-/// @param[in] self
+/// @param self
 void
-c_allocator_fixed_buffer_destroy(CAllocator** self)
+c_allocator_fixed_buffer_destroy(CAllocator* self)
 {
-  if (self && *self) {
-    **self = (CAllocator){0};
-    free(*self);
-    *self = NULL;
+  if (self) {
+    *self = (CAllocator){0};
+    free(self);
   }
 }
 
 /// Allocators generic functions
 /// @brief this is like malloc (but is has many other features)
-/// @param[in] self
-/// @param[in] size required size to be allocated
-/// @param[in] alignment check
+/// @param self
+/// @param size required size to be allocated
+/// @param alignment check
 ///                      https://en.cppreference.com/w/c/memory/aligned_alloc
-/// @param[in] zero_initialized
-/// @param[out] out_memory
-/// @return error (any value but zero is treated as an error)
-c_error_t
+/// @param zero_initialized set the allocated memory to zero
+/// @return new allocated memory or NULL on error
+void*
 c_allocator_alloc(CAllocator* self,
                   size_t      size,
                   size_t      alignment,
-                  bool        zero_initialized,
-                  void**      out_memory)
+                  bool        zero_initialized)
 {
   assert(self);
 
-  if (!out_memory) return C_ERROR_none;
-  if ((size == 0) || (alignment == 0)) {
-    *out_memory = NULL;
-    return C_ERROR_none;
-  }
-  if (size % alignment != 0) return C_ERROR_wrong_alignment;
+  if ((size == 0) || (alignment == 0)) return NULL;
+  if (size % alignment != 0) return NULL;
 
   CMemory* new_memory
       = self->vtable.alloc(self, size + sizeof(*new_memory), alignment);
-  if (!new_memory) return C_ERROR_mem_allocation;
+  if (!new_memory) return NULL;
 
   new_memory->size      = size;
   new_memory->alignment = alignment;
   if (zero_initialized) memset(new_memory->data, 0, size);
 
-  *out_memory = new_memory->data;
-
-  return C_ERROR_none;
+  return new_memory->data;
 }
 
 /// @brief this is like realloc
 /// @note Default Allocator will ALWAYS create new memory on resize to keep the
 ///       alignment
-/// @param[in] self
-/// @param[in,out] memory the input memory that need to be resized, also the
+/// @param self
+/// @param memory the input memory that need to be resized, also the
 ///                       resulted new memory will be returned here
-/// @param[in] new_size
-/// @return error (any value but zero is treated as an error)
-c_error_t
-c_allocator_resize(CAllocator* self, void** memory, size_t new_size)
+/// @param new_size
+/// @return is_ok[true]: return new reallocated memory with the new size
+///         is_ok[false]: failed to resize, and return the old @p memory
+CAllocatorResizeResult
+c_allocator_resize(CAllocator* self, void* memory, size_t new_size)
 {
   assert(self);
-  if (!memory) return C_ERROR_none;
+
+  CAllocatorResizeResult result = {.memory = memory};
+
+  if (!memory) return result;
   if (new_size == 0) {
     c_allocator_free(self, memory);
-    return C_ERROR_none;
+    return result;
   }
 
-  CMemory* old_mem = TO_CMEMORY(*memory);
+  CMemory* old_mem = TO_CMEMORY(memory);
 
   CMemory* new_mem
       = self->vtable.resize(self, old_mem, old_mem->size + sizeof(*old_mem),
                             new_size + sizeof(*old_mem), old_mem->alignment);
-  if (!new_mem) return C_ERROR_mem_allocation;
+  if (!new_mem) return result;
 
   new_mem->size = new_size;
-  *memory       = new_mem->data;
 
-  return C_ERROR_none;
+  result.memory = new_mem->data;
+  result.is_ok  = true;
+  return result;
 }
 
 /// @brief free an allocated memory
 /// @note this could handle @p memory as NULL
-/// @param[in] self
-/// @param[in] memory
+/// @param self
+/// @param memory
 void
-c_allocator_free(CAllocator* self, void** memory)
+c_allocator_free(CAllocator* self, void* memory)
 {
   assert(self);
 
   if (!memory) return;
 
-  self->vtable.free(self, TO_CMEMORY(*memory));
-  *memory = NULL;
+  self->vtable.free(self, TO_CMEMORY(memory));
 }
 
 size_t
@@ -323,7 +311,8 @@ c_internal_allocator_default_resize(
     CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
 {
   (void)self;
-  return c_mem_resize(mem, old_size, new_size, align);
+  void* resized_mem = c_mem_resize(mem, old_size, new_size, align);
+  return resized_mem ? resized_mem : mem;
 }
 
 void

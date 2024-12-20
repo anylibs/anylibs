@@ -13,26 +13,26 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
  * A PARTICULAR PURPOSE. See the License for details.
+ *
+ * @brief this module help in loading function(s)/symbol(s) from a shared
+ * library
  */
 
 #ifndef ANYLIBS_DL_LOADER_H
 #define ANYLIBS_DL_LOADER_H
 
 #include "error.h"
+#include "str.h"
 
 #include <stddef.h>
 
 typedef struct CDLLoader CDLLoader;
 
-c_error_t c_dl_loader_create(char const  file_path[],
-                             size_t      file_path_len,
-                             CDLLoader** out_dl_loader);
+/// FIXME: this should be CPath
+CDLLoader* c_dl_loader_create(CStr file_path);
 
-c_error_t c_dl_loader_get(CDLLoader* self,
-                          char const symbol_name[],
-                          size_t     symbol_name_len,
-                          void**     out_result);
+void* c_dl_loader_get(CDLLoader* self, CStr symbol_name);
 
-void c_dl_loader_destroy(CDLLoader** self);
+void c_dl_loader_destroy(CDLLoader* self);
 
 #endif // ANYLIBS_DL_LOADER_H

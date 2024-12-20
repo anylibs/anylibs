@@ -25,11 +25,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct CIterElementResult {
+  void* element;
+  bool  is_ok;
+} CIterElementResult;
+
 typedef struct CIter CIter;
-typedef bool (*CIterStepCallback)(CIter* self,
-                                  void*  data,
-                                  size_t data_len,
-                                  void** out_element);
+typedef CIterElementResult (*CIterStepCallback)(CIter* self,
+                                                void*  data,
+                                                size_t data_len);
 
 struct CIter {
   size_t            counter;
@@ -40,26 +44,22 @@ struct CIter {
   bool is_done; ///< this is used only if @ref CIter::is_reversed is true
 };
 
-void
-c_iter(size_t step_size, CIterStepCallback step_callback, CIter* out_c_iter);
+CIter c_iter(size_t step_size, CIterStepCallback step_callback);
 
-bool c_iter_default_step_callback(CIter* self,
-                                  void*  data,
-                                  size_t data_len,
-                                  void** out_element);
+CIterElementResult
+c_iter_default_step_callback(CIter* self, void* data, size_t data_len);
 
 void c_iter_rev(CIter* self, void* data, size_t data_len);
 
-bool c_iter_next(CIter* self, void* data, size_t data_len, void** out_element);
+CIterElementResult c_iter_next(CIter* self, void* data, size_t data_len);
 
-c_error_t c_iter_nth(
-    CIter* self, size_t index, void* data, size_t data_len, void** out_element);
+CIterElementResult
+c_iter_nth(CIter* self, size_t index, void* data, size_t data_len);
 
-c_error_t
-c_iter_peek(CIter const* self, void* data, size_t data_len, void** out_element);
+CIterElementResult c_iter_peek(CIter const* self, void* data, size_t data_len);
 
-void c_iter_first(CIter* self, void* data, size_t data_len, void** out_element);
+CIterElementResult c_iter_first(CIter* self, void* data, size_t data_len);
 
-void c_iter_last(CIter* self, void* data, size_t data_len, void** out_element);
+CIterElementResult c_iter_last(CIter* self, void* data, size_t data_len);
 
 #endif // ANYLIBS_ITER_H

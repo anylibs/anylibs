@@ -2,7 +2,7 @@
 #define ANYLIBS_DEF_H
 
 /// ---------------------------------------------------------------------------
-/// @brief disable sanitizer for undefined
+/// disable sanitizer for undefined
 /// ---------------------------------------------------------------------------
 #if defined(__has_attribute) && __has_attribute(no_sanitize)
 #define ANYLIBS_C_DISABLE_UNDEFINED __attribute__((no_sanitize("undefined")))
@@ -11,7 +11,7 @@
 #endif
 
 /// ---------------------------------------------------------------------------
-/// @brief this will solve the security issues related to vsnprintf
+/// this will solve the security issues related to vsnprintf
 /// ---------------------------------------------------------------------------
 #ifndef ANYLIBS_C_PRINTF
 #if (defined(__GNUC__) || defined(__clang__) || defined(__IAR_SYSTEMS_ICC__))  \

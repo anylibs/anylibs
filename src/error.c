@@ -55,6 +55,10 @@ c_error_to_str(c_error_t code)
     return "dl_loader failed";
   case C_ERROR_dl_loader_invalid_symbol:
     return "dl_loader invalid symbol";
+  case C_ERROR_fs_invalid_open_mode:
+    return "filesystem invalid open mode";
+  case C_ERROR_fs_invalid_path:
+    return "filesystem invalid path";
   default:
     return "";
   }

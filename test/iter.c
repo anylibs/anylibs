@@ -24,75 +24,69 @@ static size_t arr_len = sizeof(arr) / sizeof(*arr);
 
 UTEST(CIter, next)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
 
-  int*   data;
-  size_t counter = 0;
-  while (c_iter_next(&iter, arr, arr_len, (void**)&data)) {
-    EXPECT_EQ(arr[counter++], *data);
+  CIterElementResult data;
+  size_t             counter = 0;
+  while ((data = c_iter_next(&iter, arr, arr_len)).is_ok) {
+    EXPECT_EQ(arr[counter++], *(int*)data.element);
   }
 }
 
 UTEST(CIter, prev)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
   c_iter_rev(&iter, arr, arr_len);
 
-  int*   data;
-  size_t counter = arr_len;
-  while (c_iter_next(&iter, arr, arr_len, (void**)&data)) {
-    EXPECT_EQ(arr[--counter], *data);
+  CIterElementResult data;
+  size_t             counter = arr_len;
+  while ((data = c_iter_next(&iter, arr, arr_len)).is_ok) {
+    EXPECT_EQ(arr[--counter], *(int*)data.element);
   }
 }
 
 UTEST(CIter, nth)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
 
-  int* data;
-  int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-
-  EXPECT_EQ(4, *data);
+  CIterElementResult data = c_iter_nth(&iter, 3, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
+  EXPECT_EQ(4, *(int*)data.element);
 }
 
 UTEST(CIter, peek)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
 
-  int* data;
-  int  err = c_iter_nth(&iter, 3, arr, arr_len, (void**)&data);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
+  CIterElementResult data = c_iter_nth(&iter, 3, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
 
-  err = c_iter_peek(&iter, arr, arr_len, (void**)&data);
-  EXPECT_EQ_MSG(err, 0, c_error_to_str(err));
-  EXPECT_EQ(5, *data);
+  data = c_iter_peek(&iter, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
+  EXPECT_EQ(5, *(int*)data.element);
 }
 
 UTEST(CIter, first_last)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
 
-  int* data;
-  c_iter_first(&iter, arr, arr_len, (void**)&data);
-  EXPECT_EQ(1, *data);
-  c_iter_last(&iter, arr, arr_len, (void**)&data);
-  EXPECT_EQ(0, *data);
+  CIterElementResult data = c_iter_first(&iter, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
+  EXPECT_EQ(1, *(int*)data.element);
+
+  data = c_iter_last(&iter, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
+  EXPECT_EQ(0, *(int*)data.element);
 }
 
 UTEST(CIter, peek_beyond_last)
 {
-  CIter iter;
-  c_iter(sizeof(*arr), NULL, &iter);
+  CIter iter = c_iter(sizeof(*arr), NULL);
 
-  int* data;
-  c_iter_last(&iter, arr, arr_len, (void**)&data);
+  CIterElementResult data = c_iter_last(&iter, arr, arr_len);
+  EXPECT_TRUE(data.is_ok);
+  EXPECT_EQ(*(int*)data.element, 0);
 
-  int err = c_iter_peek(&iter, arr, arr_len, (void**)&data);
-  EXPECT_EQ(err, C_ERROR_wrong_index);
+  data = c_iter_peek(&iter, arr, arr_len);
+  EXPECT_FALSE(data.is_ok);
 }

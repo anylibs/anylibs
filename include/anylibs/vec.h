@@ -29,52 +29,55 @@ typedef struct CVec {
 } CVec;
 typedef struct CString CString;
 
-c_error_t
-c_vec_create(size_t element_size, CAllocator* allocator, CVec** out_c_vec);
+typedef struct CVecFindResult {
+  void* element;
+  bool  is_ok;
+} CVecFindResult;
 
-c_error_t c_vec_create_with_capacity(size_t      element_size,
-                                     size_t      capacity,
-                                     bool        zero_initialized,
-                                     CAllocator* allocator,
-                                     CVec**      out_c_vec);
+typedef struct CVecElementResult {
+  void* element;
+  bool  is_ok;
+} CVecElementResult;
 
-c_error_t c_vec_create_from_raw(void*       data,
-                                size_t      data_len,
-                                size_t      element_size,
-                                bool        should_copy,
-                                CAllocator* allocator,
-                                CVec**      out_c_vec);
+CVec* c_vec_create(size_t element_size, CAllocator* allocator);
 
-c_error_t
-c_vec_clone(CVec const* self, bool should_shrink_clone, CVec** out_c_vec);
+CVec* c_vec_create_with_capacity(size_t      element_size,
+                                 size_t      capacity,
+                                 bool        zero_initialized,
+                                 CAllocator* allocator);
+
+CVec* c_vec_create_from_raw(void*       data,
+                            size_t      data_len,
+                            size_t      element_size,
+                            bool        should_copy,
+                            CAllocator* allocator);
+
+CVec* c_vec_clone(CVec const* self, bool should_shrink_clone);
 
 bool c_vec_is_empty(CVec const* self);
 
-void c_vec_len(CVec const* self, size_t* out_len);
+size_t c_vec_len(CVec const* self);
 
-c_error_t c_vec_set_len(CVec* self, size_t new_len);
+void c_vec_set_len(CVec* self, size_t new_len);
 
-void c_vec_capacity(CVec const* self, size_t* out_capacity);
+size_t c_vec_capacity(CVec const* self);
 
-void c_vec_spare_capacity(CVec const* self, size_t* out_spare_capacity);
+size_t c_vec_spare_capacity(CVec const* self);
 
-c_error_t c_vec_set_capacity(CVec* self, size_t new_capacity);
+bool c_vec_set_capacity(CVec* self, size_t new_capacity);
 
-void c_vec_element_size(CVec* self, size_t* element_size);
+size_t c_vec_element_size(CVec* self);
 
-c_error_t c_vec_shrink_to_fit(CVec* self);
+bool c_vec_shrink_to_fit(CVec* self);
 
-c_error_t c_vec_get(CVec const* self, size_t index, void** out_element);
+CVecElementResult c_vec_get(CVec const* self, size_t index);
 
-c_error_t c_vec_find(CVec const* self,
-                     void*       element,
-                     int         cmp(void const*, void const*),
-                     size_t*     out_index);
+CVecFindResult
+c_vec_find(CVec const* self, void* element, int cmp(void const*, void const*));
 
-c_error_t c_vec_binary_find(CVec const* self,
-                            void const* element,
-                            int         cmp(void const*, void const*),
-                            size_t*     out_index);
+CVecFindResult c_vec_binary_find(CVec const* self,
+                                 void const* element,
+                                 int         cmp(void const*, void const*));
 
 bool c_vec_starts_with(CVec const* self,
                        void const* elements,
@@ -92,49 +95,45 @@ bool c_vec_is_sorted(CVec* self, int cmp(void const*, void const*));
 
 bool c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*));
 
-c_error_t c_vec_push(CVec* self, void const* element);
+bool c_vec_push(CVec* self, void const* element);
 
-c_error_t
-c_vec_push_range(CVec* self, void const* elements, size_t elements_len);
+bool c_vec_push_range(CVec* self, void const* elements, size_t elements_len);
 
-c_error_t c_vec_pop(CVec* self, void* out_element);
+CVecElementResult c_vec_pop(CVec* self);
 
-c_error_t c_vec_insert(CVec* self, size_t index, void const* element);
+bool c_vec_insert(CVec* self, size_t index, void const* element);
 
-c_error_t
+bool
 c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len);
 
 void c_vec_fill(CVec* self, void* data);
 
-c_error_t c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len);
+bool c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len);
 
-c_error_t c_vec_replace(
+bool c_vec_replace(
     CVec* self, size_t index, size_t range_len, void* data, size_t data_len);
 
-c_error_t c_vec_concatenate(CVec* vec1, CVec const* vec2);
+bool c_vec_concatenate(CVec* vec1, CVec const* vec2);
 
-c_error_t c_vec_rotate_right(CVec* self, size_t elements_count);
+bool c_vec_rotate_right(CVec* self, size_t elements_count);
 
-c_error_t c_vec_rotate_left(CVec* self, size_t elements_count);
+bool c_vec_rotate_left(CVec* self, size_t elements_count);
 
-c_error_t c_vec_remove(CVec* self, size_t index);
+bool c_vec_remove(CVec* self, size_t index);
 
-c_error_t c_vec_remove_range(CVec* self, size_t start_index, size_t range_len);
+bool c_vec_remove_range(CVec* self, size_t start_index, size_t range_len);
 
-c_error_t c_vec_deduplicate(CVec* self, int cmp(void const*, void const*));
+bool c_vec_deduplicate(CVec* self, int cmp(void const*, void const*));
 
-c_error_t c_vec_slice(CVec const* self,
-                      size_t      start_index,
-                      size_t      range_len,
-                      CVec**      out_slice);
+CVec* c_vec_slice(CVec const* self, size_t start_index, size_t range_len);
 
-void c_vec_iter(CVec* self, CIterStepCallback step_callback, CIter* out_c_iter);
+CIter c_vec_iter(CVec* self, CIterStepCallback step_callback);
 
-c_error_t c_vec_reverse(CVec* self);
+bool c_vec_reverse(CVec* self);
 
 void c_vec_clear(CVec* self);
 
-void c_vec_to_str(CVec* self, CString** out_c_str);
+CString* c_cvec_to_cstring(CVec* self);
 
-void c_vec_destroy(CVec** self);
+void c_vec_destroy(CVec* self);
 #endif // ANYLIBS_VEC_H

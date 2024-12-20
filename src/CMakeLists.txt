@@ -7,5 +7,6 @@ add_library(${PROJECT_NAME}
     str.c
     iter.c
     dl_loader.c
+    # fs.c
 )
 target_link_libraries(${PROJECT_NAME} anylibs)
