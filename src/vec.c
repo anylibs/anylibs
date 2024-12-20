@@ -16,6 +16,7 @@
  */
 
 #include "anylibs/vec.h"
+#include "anylibs/error.h"
 #include "internal/vec.h"
 
 #include <assert.h>
@@ -84,6 +85,7 @@ c_vec_create_with_capacity(size_t      element_size,
   return FROM_IMPL(impl);
 
 ERROR_ALLOC:
+  c_error_set(C_ERROR_mem_allocation);
   c_allocator_free(allocator, impl);
   c_allocator_free(allocator, data_mem);
   return NULL;
@@ -124,7 +126,7 @@ c_vec_create_from_raw(void*       data,
   } else {
     impl = (CVecImpl*)c_vec_create_with_capacity(element_size, data_len, false,
                                                  allocator);
-    if (!impl) return NULL;
+    if (!impl) goto ERROR_ALLOC;
 
     impl->len = TO_BYTES(impl, data_len);
     memcpy(impl->data, data, TO_IMPL(impl)->len);
@@ -132,6 +134,7 @@ c_vec_create_from_raw(void*       data,
 
   return FROM_IMPL(impl);
 ERROR_ALLOC:
+  c_error_set(C_ERROR_mem_allocation);
   c_allocator_free(allocator, impl);
   return NULL;
 }
@@ -228,13 +231,13 @@ bool
 c_vec_set_capacity(CVec* self, size_t new_capacity)
 {
   assert(self && TO_IMPL(self)->data);
-  assert(new_capacity > 0);
 
   if (TO_IMPL(self)->raw_capacity > 0) {
     if (new_capacity <= TO_IMPL(self)->raw_capacity) {
       TO_IMPL(self)->raw_capacity = new_capacity;
       return true;
     } else {
+      c_error_set(C_ERROR_raw_data);
       return false;
     }
   }
@@ -243,15 +246,16 @@ c_vec_set_capacity(CVec* self, size_t new_capacity)
                        ? TO_BYTES(self, new_capacity)
                        : TO_IMPL(self)->len;
 
-  CAllocatorResizeResult result
+  CResultVoidPtr result
       = c_allocator_resize(TO_IMPL(self)->allocator, TO_IMPL(self)->data,
                            TO_BYTES(self, new_capacity));
 
   if (result.is_ok) {
-    TO_IMPL(self)->data = result.memory;
+    TO_IMPL(self)->data = result.vp;
     TO_IMPL(self)->len  = new_len;
     return true;
   } else {
+    c_error_set(C_ERROR_mem_allocation);
     return false;
   }
 }
@@ -280,18 +284,21 @@ c_vec_shrink_to_fit(CVec* self)
 /// @param cmp this is similar to strcmp
 /// @return is_ok[true]: return the found element
 ///         is_ok[false]: not found
-CVecFindResult
+CResultVoidPtr
 c_vec_find(CVec const* self, void* element, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->data);
 
-  CVecFindResult result = {0};
-  if (!cmp) return result;
+  CResultVoidPtr result = {0};
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return result;
+  }
 
   for (size_t iii = 0; iii < TO_UNITS(self, TO_IMPL(self)->len); iii++) {
     if (cmp(element, (char*)TO_IMPL(self)->data + TO_BYTES(self, iii)) == 0) {
-      result.element = (char*)TO_IMPL(self)->data + TO_BYTES(self, iii);
-      result.is_ok   = true;
+      result.vp    = (char*)TO_IMPL(self)->data + TO_BYTES(self, iii);
+      result.is_ok = true;
       return result;
     }
   }
@@ -307,23 +314,26 @@ c_vec_find(CVec const* self, void* element, int cmp(void const*, void const*))
 /// @param cmp this is similar to strcmp
 /// @return is_ok[true]: return the found element
 ///         is_ok[false]: not found
-CVecFindResult
+CResultVoidPtr
 c_vec_binary_find(CVec const* self,
                   void const* element,
                   int         cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->data);
 
-  CVecFindResult result = {0};
-  if (!cmp) return result;
+  CResultVoidPtr result = {0};
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return result;
+  }
 
   void* out_element = bsearch(element, TO_IMPL(self)->data,
                               TO_UNITS(self, TO_IMPL(self)->len),
                               TO_IMPL(self)->element_size, cmp);
 
   if (out_element) {
-    result.element = out_element;
-    result.is_ok   = true;
+    result.vp    = out_element;
+    result.is_ok = true;
   }
 
   return result;
@@ -335,8 +345,11 @@ c_vec_binary_find(CVec const* self,
 /// @param elements
 /// @param elements_len
 /// @param cmp this is similar to strcmp
-/// @return bool
-bool
+/// @return is_ok[true], has[true]: the @p self starts with @p elements
+///         is_ok[true], has[false]: the @p self does not starts with @p
+///                                  elements
+///         is_ok[false], has[X]: error happened
+CResultBool
 c_vec_starts_with(CVec const* self,
                   void const* elements,
                   size_t      elements_len,
@@ -345,18 +358,28 @@ c_vec_starts_with(CVec const* self,
   assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
-  if (!cmp) return false;
-  if (TO_IMPL(self)->len < TO_BYTES(self, elements_len)) return false;
+  CResultBool result = {0};
 
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return result;
+  }
+  if (TO_IMPL(self)->len < TO_BYTES(self, elements_len)) {
+    c_error_set(C_ERROR_invalid_len);
+    return result;
+  }
+
+  result.is_ok = true;
   for (size_t iii = 0; iii < elements_len; iii++) {
     if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
             (char*)elements + TO_BYTES(self, iii))
         != 0) {
-      return false;
+      return result;
     }
   }
 
-  return true;
+  result.is_true = true;
+  return result;
 }
 
 /// @brief check if @p elements is the same as the end elements
@@ -365,8 +388,11 @@ c_vec_starts_with(CVec const* self,
 /// @param elements
 /// @param elements_len
 /// @param cmp this is similar to strcmp
-/// @return bool
-bool
+/// @return is_ok[true], has[true]: the @p self ends with @p elements
+///         is_ok[true], has[false]: the @p self does not ends with @p
+///                                  elements
+///         is_ok[false], has[X]: error happened
+CResultBool
 c_vec_ends_with(CVec const* self,
                 void const* elements,
                 size_t      elements_len,
@@ -375,32 +401,47 @@ c_vec_ends_with(CVec const* self,
   assert(self && TO_IMPL(self)->data);
   assert(elements && elements_len > 0);
 
-  if (!cmp) return false;
-  if (TO_IMPL(self)->len < TO_BYTES(self, elements_len)) return false;
+  CResultBool result = {0};
 
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return result;
+  }
+  if (TO_IMPL(self)->len < TO_BYTES(self, elements_len)) {
+    c_error_set(C_ERROR_invalid_len);
+    return result;
+  }
+
+  result.is_ok = true;
   for (size_t iii = TO_UNITS(self, TO_IMPL(self)->len) - elements_len, jjj = 0;
        iii < TO_UNITS(self, TO_IMPL(self)->len); iii++, jjj++) {
     if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
             (char*)elements + TO_BYTES(self, jjj))
         != 0) {
-      return false;
+      return result;
     }
   }
 
-  return true;
+  result.is_true = true;
+  return result;
 }
 
 /// @brief sort
 /// @param self
 /// @param cmp this is similar to strcmp
-void
+bool
 c_vec_sort(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->data);
-  if (!cmp) return;
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return false;
+  }
 
   qsort(TO_IMPL(self)->data, TO_UNITS(self, TO_IMPL(self)->len),
         TO_IMPL(self)->element_size, cmp);
+
+  return true;
 }
 
 /// @brief check if sorted or not (in ascending order)
@@ -411,8 +452,10 @@ bool
 c_vec_is_sorted(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->data);
-
-  if (!cmp) return false;
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return false;
+  }
 
   for (size_t iii = 1; iii < TO_UNITS(self, TO_IMPL(self)->len); ++iii) {
     if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
@@ -434,7 +477,10 @@ c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*))
 {
   assert(self && TO_IMPL(self)->data);
 
-  if (!cmp) return false;
+  if (!cmp) {
+    c_error_set(C_ERROR_invalid_compare_fn);
+    return false;
+  }
 
   for (size_t iii = 1; iii < TO_UNITS(self, TO_IMPL(self)->len); ++iii) {
     if (cmp((char*)TO_IMPL(self)->data + TO_BYTES(self, iii),
@@ -452,16 +498,19 @@ c_vec_is_sorted_inv(CVec* self, int cmp(void const*, void const*))
 /// @param index
 /// @return is_ok[true]: return the element
 ///         is_ok[false]: not found
-CVecElementResult
+CResultVoidPtr
 c_vec_get(CVec const* self, size_t index)
 {
   assert(self && TO_IMPL(self)->data);
 
-  CVecElementResult result = {0};
-  if (TO_BYTES(self, index) > TO_IMPL(self)->len) return result;
+  CResultVoidPtr result = {0};
+  if (TO_BYTES(self, index) > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_index);
+    return result;
+  }
 
-  result.element = (char*)TO_IMPL(self)->data + TO_BYTES(self, index);
-  result.is_ok   = true;
+  result.vp    = (char*)TO_IMPL(self)->data + TO_BYTES(self, index);
+  result.is_ok = true;
   return result;
 }
 
@@ -512,20 +561,19 @@ c_vec_push_range(CVec* self, void const* elements, size_t elements_len)
 /// @param self
 /// @return is_ok[true]: return the element
 ///         is_ok[false]: not found
-CVecElementResult
+CResultVoidPtr
 c_vec_pop(CVec* self)
 {
   assert(self && TO_IMPL(self)->data);
 
-  CVecElementResult result = {0};
-  if (TO_IMPL(self)->len == 0) return result;
+  CResultVoidPtr result = {0};
+  if (TO_IMPL(self)->len == 0) {
+    c_error_set(C_ERROR_empty);
+    return result;
+  }
 
-  // memcpy(out_element,
-  //        (uint8_t*)TO_IMPL(self)->data + TO_IMPL(self)->len
-  //            - TO_IMPL(self)->element_size,
-  //        TO_IMPL(self)->element_size);
-  result.element = (uint8_t*)TO_IMPL(self)->data + TO_IMPL(self)->len
-                   - TO_IMPL(self)->element_size;
+  result.vp = (uint8_t*)TO_IMPL(self)->data + TO_IMPL(self)->len
+              - TO_IMPL(self)->element_size;
   TO_IMPL(self)->len -= TO_IMPL(self)->element_size;
 
   if (TO_IMPL(self)->len <= (GET_CAPACITY(self) / 4)) {
@@ -550,7 +598,10 @@ c_vec_insert(CVec* self, size_t index, void const* element)
 {
   assert(self && TO_IMPL(self)->data);
 
-  if (TO_IMPL(self)->len <= TO_BYTES(self, index)) return false;
+  if (TO_IMPL(self)->len <= TO_BYTES(self, index)) {
+    c_error_set(C_ERROR_invalid_index);
+    return false;
+  }
 
   if (TO_IMPL(self)->len == GET_CAPACITY(self)) {
     bool resized
@@ -585,7 +636,10 @@ c_vec_insert_range(CVec* self, size_t index, void const* data, size_t data_len)
   assert(data);
   assert(data_len > 0);
 
-  if (TO_IMPL(self)->len < TO_BYTES(self, index)) return false;
+  if (TO_IMPL(self)->len < TO_BYTES(self, index)) {
+    c_error_set(C_ERROR_invalid_index);
+    return false;
+  }
 
   while ((TO_IMPL(self)->len + TO_BYTES(self, data_len)) > GET_CAPACITY(self)) {
     bool resized
@@ -635,7 +689,10 @@ c_vec_concatenate(CVec* vec1, CVec const* vec2)
   assert(vec1 && vec1->data);
   assert(vec2 && vec2->data);
 
-  if (TO_IMPL(vec1)->element_size != TO_IMPL(vec2)->element_size) return false;
+  if (TO_IMPL(vec1)->element_size != TO_IMPL(vec2)->element_size) {
+    c_error_set(C_ERROR_invalid_element_size);
+    return false;
+  }
 
   if (GET_CAPACITY(vec1) < (TO_IMPL(vec1)->len + TO_IMPL(vec2)->len)) {
     bool resized = c_vec_set_capacity(
@@ -660,7 +717,10 @@ bool
 c_vec_fill_with_repeat(CVec* self, void* data, size_t data_len)
 {
   assert(self && TO_IMPL(self)->data);
-  if (data_len > TO_UNITS(self, GET_CAPACITY(self))) return false;
+  if (data_len > TO_UNITS(self, GET_CAPACITY(self))) {
+    c_error_set(C_ERROR_invalid_len);
+    return false;
+  }
 
   size_t const number_of_repeats
       = TO_UNITS(self, GET_CAPACITY(self)) / data_len;
@@ -688,7 +748,7 @@ c_vec_replace(
 {
   assert(self && self->data);
 
-  if (range_len == 0 || !data || data_len == 0) return false;
+  if (range_len == 0 || !data || data_len == 0) return true;
 
   size_t len_as_units = TO_UNITS(self, TO_IMPL(self)->len);
   size_t cap_as_units
@@ -732,9 +792,11 @@ bool
 c_vec_rotate_right(CVec* self, size_t elements_count)
 {
   assert(self && TO_IMPL(self)->data);
-  if ((elements_count == 0)
-      || (TO_BYTES(self, elements_count) > TO_IMPL(self)->len))
+  if (elements_count == 0) return true;
+  if (TO_BYTES(self, elements_count) > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_range);
     return false;
+  }
 
   void* tmp_mem = c_allocator_alloc(TO_IMPL(self)->allocator,
                                     TO_BYTES(self, elements_count),
@@ -763,9 +825,11 @@ bool
 c_vec_rotate_left(CVec* self, size_t elements_count)
 {
   assert(self && TO_IMPL(self)->data);
-  if ((elements_count == 0)
-      || (TO_BYTES(self, elements_count) > TO_IMPL(self)->len))
+  if (elements_count == 0) return true;
+  if (TO_BYTES(self, elements_count) > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_range);
     return false;
+  }
 
   void* tmp_mem = c_allocator_alloc(TO_IMPL(self)->allocator,
                                     TO_BYTES(self, elements_count),
@@ -796,7 +860,10 @@ c_vec_remove(CVec* self, size_t index)
 {
   assert(self && TO_IMPL(self)->data);
 
-  if (TO_BYTES(self, index) <= TO_IMPL(self)->len) return false;
+  if (TO_BYTES(self, index) <= TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_index);
+    return false;
+  }
 
   uint8_t* element = (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, index);
 
@@ -825,10 +892,19 @@ c_vec_remove_range(CVec* self, size_t start_index, size_t range_len)
 {
   assert(self && TO_IMPL(self)->data);
 
-  if (TO_IMPL(self)->len == 0U) return false;
-  if (start_index > (TO_UNITS(self, TO_IMPL(self)->len) - 1U)) return false;
-  if (TO_BYTES(self, start_index + range_len) > TO_IMPL(self)->len)
+  if (TO_IMPL(self)->len == 0U) {
+    c_error_set(C_ERROR_empty);
     return false;
+  }
+
+  if (start_index > (TO_UNITS(self, TO_IMPL(self)->len) - 1U)) {
+    c_error_set(C_ERROR_invalid_index);
+    return false;
+  }
+  if (TO_BYTES(self, start_index + range_len) > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_range);
+    return false;
+  }
 
   uint8_t* start_ptr
       = (uint8_t*)TO_IMPL(self)->data + TO_BYTES(self, start_index);
@@ -894,7 +970,10 @@ c_vec_slice(CVec const* self, size_t start_index, size_t range_len)
 
   CVec* slice = NULL;
 
-  if (TO_BYTES(self, start_index) > TO_IMPL(self)->len) return slice;
+  if (TO_BYTES(self, start_index) > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_index);
+    return slice;
+  }
 
   range_len = (TO_UNITS(self, TO_IMPL(self)->len) - start_index) < range_len
                   ? TO_UNITS(self, TO_IMPL(self)->len)
@@ -955,11 +1034,14 @@ c_vec_reverse(CVec* self)
 }
 
 /// @brief clear the @ref CVecImpl without changing the capacity
+/// @note this will zero the data
 /// @param self
 void
 c_vec_clear(CVec* self)
 {
   assert(self && TO_IMPL(self)->data);
+
+  memset(self->data, 0, TO_UNITS(self, TO_IMPL(self)->len));
   TO_IMPL(self)->len = 0;
 }
 
@@ -970,7 +1052,6 @@ CString*
 c_cvec_to_cstring(CVec* self)
 {
   assert(self);
-
   return (CString*)self;
 }
 

@@ -26,10 +26,10 @@ UTEST(CIter, next)
 {
   CIter iter = c_iter(sizeof(*arr), NULL);
 
-  CIterElementResult data;
-  size_t             counter = 0;
+  CResultVoidPtr data;
+  size_t         counter = 0;
   while ((data = c_iter_next(&iter, arr, arr_len)).is_ok) {
-    EXPECT_EQ(arr[counter++], *(int*)data.element);
+    EXPECT_EQ(arr[counter++], *(int*)data.vp);
   }
 }
 
@@ -38,10 +38,10 @@ UTEST(CIter, prev)
   CIter iter = c_iter(sizeof(*arr), NULL);
   c_iter_rev(&iter, arr, arr_len);
 
-  CIterElementResult data;
-  size_t             counter = arr_len;
+  CResultVoidPtr data;
+  size_t         counter = arr_len;
   while ((data = c_iter_next(&iter, arr, arr_len)).is_ok) {
-    EXPECT_EQ(arr[--counter], *(int*)data.element);
+    EXPECT_EQ(arr[--counter], *(int*)data.vp);
   }
 }
 
@@ -49,43 +49,43 @@ UTEST(CIter, nth)
 {
   CIter iter = c_iter(sizeof(*arr), NULL);
 
-  CIterElementResult data = c_iter_nth(&iter, 3, arr, arr_len);
+  CResultVoidPtr data = c_iter_nth(&iter, 3, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(4, *(int*)data.element);
+  EXPECT_EQ(4, *(int*)data.vp);
 }
 
 UTEST(CIter, peek)
 {
   CIter iter = c_iter(sizeof(*arr), NULL);
 
-  CIterElementResult data = c_iter_nth(&iter, 3, arr, arr_len);
+  CResultVoidPtr data = c_iter_nth(&iter, 3, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
 
   data = c_iter_peek(&iter, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(5, *(int*)data.element);
+  EXPECT_EQ(5, *(int*)data.vp);
 }
 
 UTEST(CIter, first_last)
 {
   CIter iter = c_iter(sizeof(*arr), NULL);
 
-  CIterElementResult data = c_iter_first(&iter, arr, arr_len);
+  CResultVoidPtr data = c_iter_first(&iter, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(1, *(int*)data.element);
+  EXPECT_EQ(1, *(int*)data.vp);
 
   data = c_iter_last(&iter, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(0, *(int*)data.element);
+  EXPECT_EQ(0, *(int*)data.vp);
 }
 
 UTEST(CIter, peek_beyond_last)
 {
   CIter iter = c_iter(sizeof(*arr), NULL);
 
-  CIterElementResult data = c_iter_last(&iter, arr, arr_len);
+  CResultVoidPtr data = c_iter_last(&iter, arr, arr_len);
   EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(*(int*)data.element, 0);
+  EXPECT_EQ(*(int*)data.vp, 0);
 
   data = c_iter_peek(&iter, arr, arr_len);
   EXPECT_FALSE(data.is_ok);

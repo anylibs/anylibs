@@ -1,4 +1,5 @@
 #include "anylibs/dl_loader.h"
+#include "anylibs/error.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -17,8 +18,14 @@
 CDLLoader*
 c_dl_loader_create(CStr file_path)
 {
-  if (!file_path.data || file_path.len == 0) return NULL;
-  if (file_path.data[file_path.len] != '\0') return NULL;
+  if (!file_path.data || file_path.len == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return NULL;
+  }
+  if (file_path.data[file_path.len] != '\0') {
+    c_error_set(C_ERROR_none_terminated_raw_str);
+    return NULL;
+  }
 
 #ifdef _WIN32
   void* result = (void*)LoadLibraryA(file_path.data);
@@ -38,8 +45,14 @@ c_dl_loader_get(CDLLoader* self, CStr symbol_name)
 {
   assert(self);
 
-  if (!symbol_name.data || symbol_name.len == 0) return NULL;
-  if (symbol_name.data[symbol_name.len] != '\0') return NULL;
+  if (!symbol_name.data || symbol_name.len == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return NULL;
+  }
+  if (symbol_name.data[symbol_name.len] != '\0') {
+    c_error_set(C_ERROR_none_terminated_raw_str);
+    return NULL;
+  }
 
 #ifdef _WIN32
   void* result = GetProcAddress(self, symbol_name.data);

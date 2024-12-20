@@ -21,7 +21,6 @@
 #ifndef ANYLIBS_DL_LOADER_H
 #define ANYLIBS_DL_LOADER_H
 
-#include "error.h"
 #include "str.h"
 
 #include <stddef.h>

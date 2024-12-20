@@ -1,6 +1,24 @@
 #ifndef ANYLIBS_DEF_H
 #define ANYLIBS_DEF_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef struct CResultBool {
+  bool is_true;
+  bool is_ok;
+} CResultBool;
+
+typedef struct CResultSizeT {
+  size_t s;
+  bool   is_ok;
+} CResultSizeT;
+
+typedef struct CResultVoidPtr {
+  void* vp;
+  bool  is_ok;
+} CResultVoidPtr;
+
 /// ---------------------------------------------------------------------------
 /// disable sanitizer for undefined
 /// ---------------------------------------------------------------------------

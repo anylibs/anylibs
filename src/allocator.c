@@ -16,6 +16,7 @@
  */
 
 #include "anylibs/allocator.h"
+#include "anylibs/error.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -115,11 +116,15 @@ CAllocator*
 c_allocator_arena_create(size_t capacity)
 {
   CAllocator* allocator = malloc(sizeof(CAllocator));
-  if (!allocator) return NULL;
+  if (!allocator) {
+    c_error_set(C_ERROR_mem_allocation);
+    return NULL;
+  }
 
   allocator->main_mem.buf = malloc(capacity);
   if (!allocator->main_mem.buf) {
     free(allocator);
+    c_error_set(C_ERROR_mem_allocation);
     return NULL;
   }
 
@@ -198,12 +203,21 @@ c_allocator_alloc(CAllocator* self,
 {
   assert(self);
 
-  if ((size == 0) || (alignment == 0)) return NULL;
-  if (size % alignment != 0) return NULL;
+  if (size == 0) {
+    c_error_set(C_ERROR_invalid_size);
+    return NULL;
+  }
+  if ((alignment == 0) || (size % alignment != 0)) {
+    c_error_set(C_ERROR_invalid_alignment);
+    return NULL;
+  }
 
   CMemory* new_memory
       = self->vtable.alloc(self, size + sizeof(*new_memory), alignment);
-  if (!new_memory) return NULL;
+  if (!new_memory) {
+    c_error_set(C_ERROR_mem_allocation);
+    return NULL;
+  }
 
   new_memory->size      = size;
   new_memory->alignment = alignment;
@@ -221,16 +235,17 @@ c_allocator_alloc(CAllocator* self,
 /// @param new_size
 /// @return is_ok[true]: return new reallocated memory with the new size
 ///         is_ok[false]: failed to resize, and return the old @p memory
-CAllocatorResizeResult
+CResultVoidPtr
 c_allocator_resize(CAllocator* self, void* memory, size_t new_size)
 {
   assert(self);
 
-  CAllocatorResizeResult result = {.memory = memory};
+  CResultVoidPtr result = {.vp = memory};
 
   if (!memory) return result;
   if (new_size == 0) {
     c_allocator_free(self, memory);
+    result.is_ok = true;
     return result;
   }
 
@@ -239,12 +254,15 @@ c_allocator_resize(CAllocator* self, void* memory, size_t new_size)
   CMemory* new_mem
       = self->vtable.resize(self, old_mem, old_mem->size + sizeof(*old_mem),
                             new_size + sizeof(*old_mem), old_mem->alignment);
-  if (!new_mem) return result;
+  if (!new_mem) {
+    c_error_set(C_ERROR_mem_allocation);
+    return result;
+  }
 
   new_mem->size = new_size;
 
-  result.memory = new_mem->data;
-  result.is_ok  = true;
+  result.vp    = new_mem->data;
+  result.is_ok = true;
   return result;
 }
 
@@ -332,7 +350,10 @@ c_internal_allocator_arena_alloc(CAllocator* self, size_t size, size_t align)
       && ((intptr_t)((char*)self->main_mem.buf + new_data_index) % align != 0))
     new_data_index++;
 
-  if ((self->main_mem.capacity - (new_data_index - size)) < size) return NULL;
+  if ((self->main_mem.capacity - (new_data_index - size)) < size) {
+    c_error_set(C_ERROR_mem_allocation);
+    return NULL;
+  }
   self->main_mem.current_size += size;
 
   return &((char*)self->main_mem.buf)[self->main_mem.current_size - size];
@@ -351,7 +372,10 @@ c_internal_allocator_arena_resize(
   }
 
   void* new_mem = c_internal_allocator_arena_alloc(self, new_size, align);
-  if (!new_mem) return NULL;
+  if (!new_mem) {
+    c_error_set(C_ERROR_mem_allocation);
+    return NULL;
+  }
   memcpy(new_mem, mem, old_size);
 
   return new_mem;

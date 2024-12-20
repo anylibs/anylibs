@@ -19,21 +19,16 @@
 #define ANYLIBS_ITER_H
 
 #include "allocator.h"
-#include "error.h"
+#include "def.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct CIterElementResult {
-  void* element;
-  bool  is_ok;
-} CIterElementResult;
-
 typedef struct CIter CIter;
-typedef CIterElementResult (*CIterStepCallback)(CIter* self,
-                                                void*  data,
-                                                size_t data_len);
+typedef CResultVoidPtr (*CIterStepCallback)(CIter* self,
+                                            void*  data,
+                                            size_t data_len);
 
 struct CIter {
   size_t            counter;
@@ -46,20 +41,20 @@ struct CIter {
 
 CIter c_iter(size_t step_size, CIterStepCallback step_callback);
 
-CIterElementResult
+CResultVoidPtr
 c_iter_default_step_callback(CIter* self, void* data, size_t data_len);
 
 void c_iter_rev(CIter* self, void* data, size_t data_len);
 
-CIterElementResult c_iter_next(CIter* self, void* data, size_t data_len);
+CResultVoidPtr c_iter_next(CIter* self, void* data, size_t data_len);
 
-CIterElementResult
+CResultVoidPtr
 c_iter_nth(CIter* self, size_t index, void* data, size_t data_len);
 
-CIterElementResult c_iter_peek(CIter const* self, void* data, size_t data_len);
+CResultVoidPtr c_iter_peek(CIter const* self, void* data, size_t data_len);
 
-CIterElementResult c_iter_first(CIter* self, void* data, size_t data_len);
+CResultVoidPtr c_iter_first(CIter* self, void* data, size_t data_len);
 
-CIterElementResult c_iter_last(CIter* self, void* data, size_t data_len);
+CResultVoidPtr c_iter_last(CIter* self, void* data, size_t data_len);
 
 #endif // ANYLIBS_ITER_H

@@ -21,23 +21,13 @@
 #include <stddef.h>
 
 #include "allocator.h"
-#include "error.h"
+#include "def.h"
 #include "iter.h"
 
 typedef struct CVec {
   void* data; ///< heap allocated data
 } CVec;
 typedef struct CString CString;
-
-typedef struct CVecFindResult {
-  void* element;
-  bool  is_ok;
-} CVecFindResult;
-
-typedef struct CVecElementResult {
-  void* element;
-  bool  is_ok;
-} CVecElementResult;
 
 CVec* c_vec_create(size_t element_size, CAllocator* allocator);
 
@@ -70,26 +60,26 @@ size_t c_vec_element_size(CVec* self);
 
 bool c_vec_shrink_to_fit(CVec* self);
 
-CVecElementResult c_vec_get(CVec const* self, size_t index);
+CResultVoidPtr c_vec_get(CVec const* self, size_t index);
 
-CVecFindResult
+CResultVoidPtr
 c_vec_find(CVec const* self, void* element, int cmp(void const*, void const*));
 
-CVecFindResult c_vec_binary_find(CVec const* self,
+CResultVoidPtr c_vec_binary_find(CVec const* self,
                                  void const* element,
                                  int         cmp(void const*, void const*));
 
-bool c_vec_starts_with(CVec const* self,
-                       void const* elements,
-                       size_t      elements_len,
-                       int         cmp(void const*, void const*));
+CResultBool c_vec_starts_with(CVec const* self,
+                              void const* elements,
+                              size_t      elements_len,
+                              int         cmp(void const*, void const*));
 
-bool c_vec_ends_with(CVec const* self,
-                     void const* elements,
-                     size_t      elements_len,
-                     int         cmp(void const*, void const*));
+CResultBool c_vec_ends_with(CVec const* self,
+                            void const* elements,
+                            size_t      elements_len,
+                            int         cmp(void const*, void const*));
 
-void c_vec_sort(CVec* self, int cmp(void const*, void const*));
+bool c_vec_sort(CVec* self, int cmp(void const*, void const*));
 
 bool c_vec_is_sorted(CVec* self, int cmp(void const*, void const*));
 
@@ -99,7 +89,7 @@ bool c_vec_push(CVec* self, void const* element);
 
 bool c_vec_push_range(CVec* self, void const* elements, size_t elements_len);
 
-CVecElementResult c_vec_pop(CVec* self);
+CResultVoidPtr c_vec_pop(CVec* self);
 
 bool c_vec_insert(CVec* self, size_t index, void const* element);
 

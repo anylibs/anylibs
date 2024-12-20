@@ -57,24 +57,24 @@ typedef struct CStringIter {
   size_t current_ch_size;
 } CStringIter;
 
-typedef struct CCharOwnedResult {
+typedef struct CResultCharOwned {
   CCharOwned ch;
   bool       is_ok;
-} CCharOwnedResult;
+} CResultCharOwned;
 
-typedef struct CCharResult {
+typedef struct CResultChar {
   CChar ch;
   bool  is_ok;
-} CCharResult;
+} CResultChar;
 
-typedef struct CStrResult {
+typedef struct CResultStr {
   CStr str;
   bool is_ok;
-} CStrResult;
+} CResultStr;
 
-typedef CIterElementResult (*CStringIterStepCallback)(CStringIter* self,
-                                                      char*        data,
-                                                      size_t       data_size);
+typedef CResultVoidPtr (*CStringIterStepCallback)(CStringIter* self,
+                                                  char*        data,
+                                                  size_t       data_size);
 typedef struct CVec CVec;
 
 CString* c_str_create(CAllocator* allocator);
@@ -90,7 +90,7 @@ CString* c_str_clone(CString const* self, bool should_shrink_clone);
 
 bool c_str_is_empty(CString const* self);
 
-size_t c_str_count(CString const* self);
+CResultSizeT c_str_count(CString const* self);
 
 size_t c_str_len(CString const* self);
 
@@ -104,20 +104,20 @@ bool c_str_set_capacity(CString* self, size_t new_capacity);
 
 bool c_str_shrink_to_fit(CString* self);
 
-CStrResult
+CResultStr
 c_str_get(CString const* self, size_t start_index, size_t range_size);
 
-CStrResult c_str_find(CString const* self, CChar ch);
+CResultStr c_str_find(CString const* self, CChar ch);
 
-CStrResult c_str_find_by_iter(CString const* self, CChar ch, CStringIter* iter);
+CResultStr c_str_find_by_iter(CString const* self, CChar ch, CStringIter* iter);
 
-bool c_str_starts_with(CString const* self, CStr cstr);
+CResultBool c_str_starts_with(CString const* self, CStr cstr);
 
-bool c_str_ends_with(CString const* self, CStr cstr);
+CResultBool c_str_ends_with(CString const* self, CStr cstr);
 
 bool c_str_push(CString* self, CStr cstr);
 
-CCharOwnedResult c_str_pop(CString* self);
+CResultCharOwned c_str_pop(CString* self);
 
 bool c_str_insert(CString* self, size_t byte_index, CStr cstr);
 
@@ -136,14 +136,14 @@ CStr c_str_trim_start(CString const* self);
 CStr c_str_trim_end(CString const* self);
 
 // c_error_t c_str_split(CString const* self, size_t index, CVec** out_slices);
-CStrResult c_str_split(CString const* self,
+CResultStr c_str_split(CString const* self,
                        CChar const    delimeters[],
                        size_t         delimeters_len,
                        CStringIter*   iter);
 
-CStrResult c_str_split_by_whitespace(CString const* self, CStringIter* iter);
+CResultStr c_str_split_by_whitespace(CString const* self, CStringIter* iter);
 
-CStrResult c_str_split_by_line(CString const* self, CStringIter* iter);
+CResultStr c_str_split_by_line(CString const* self, CStringIter* iter);
 
 CVec* c_str_to_utf16(CString const* self);
 
@@ -158,22 +158,22 @@ void c_str_to_ascii_lowercase(CString* self);
 CStringIter c_str_iter(CStringIterStepCallback step_callback);
 
 ANYLIBS_C_DISABLE_UNDEFINED
-CIterElementResult c_str_iter_default_step_callback(CStringIter* iter,
-                                                    char*        data,
-                                                    size_t       data_len);
+CResultVoidPtr c_str_iter_default_step_callback(CStringIter* iter,
+                                                char*        data,
+                                                size_t       data_len);
 
 void c_str_iter_rev(CString const* self, CStringIter* iter);
 
-CCharResult c_str_iter_next(CString const* self, CStringIter* iter);
+CResultChar c_str_iter_next(CString const* self, CStringIter* iter);
 
-CCharResult
+CResultChar
 c_str_iter_nth(CString const* self, CStringIter* iter, size_t index);
 
-CCharResult c_str_iter_peek(CString const* self, CStringIter const* iter);
+CResultChar c_str_iter_peek(CString const* self, CStringIter const* iter);
 
-CCharResult c_str_iter_first(CString const* self, CStringIter* iter);
+CResultChar c_str_iter_first(CString const* self, CStringIter* iter);
 
-CCharResult c_str_iter_last(CString const* self, CStringIter* iter);
+CResultChar c_str_iter_last(CString const* self, CStringIter* iter);
 
 CString* c_str_reverse(CString const* self);
 

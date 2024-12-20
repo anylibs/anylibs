@@ -16,6 +16,7 @@
  */
 
 #include "anylibs/str.h"
+#include "anylibs/error.h"
 #include "anylibs/vec.h"
 #include "internal/vec.h"
 
@@ -97,18 +98,18 @@ typedef struct CChar32 {
   size_t   count;
 } CChar32;
 
-typedef struct CChar16Result {
+typedef struct CResultChar16 {
   CChar16 ch;
   bool    is_ok;
-} CChar16Result;
+} CResultChar16;
 
-typedef struct CChar32Result {
+typedef struct CResultChar32 {
   CChar32 ch;
   bool    is_ok;
-} CChar32Result;
+} CResultChar32;
 
-static CChar32Result c_internal_str_utf8_to_utf32(const char* utf8);
-static CChar16Result c_internal_str_utf32_to_utf16(uint32_t codepoint);
+static CResultChar32 c_internal_str_utf8_to_utf32(const char* utf8);
+static CResultChar16 c_internal_str_utf32_to_utf16(uint32_t codepoint);
 
 /// @brief create @ref CString object
 /// @param allocator the allocator (if NULL the Default Allocator will be
@@ -198,17 +199,25 @@ c_str_is_empty(CString const* self)
 
 /// @brief return the number of utf8 characters
 /// @param self
-/// @return utf-8 characters count
-size_t
+/// @return is_ok[true]: utf-8 characters count
+///         is_ok[false]: invalid utf-8 or other errors
+CResultSizeT
 c_str_count(CString const* self)
 {
   assert(self);
 
+  CResultSizeT result = {0};
+
   CStringIter iter = c_str_iter(NULL);
   while (c_str_iter_next(self, &iter).is_ok) {}
-  if (iter.base.counter < TO_IMPL(self)->len) return C_ERROR_invalid_unicode;
+  if (iter.base.counter < TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_unicode);
+    return result;
+  }
 
-  return iter.ch_counter;
+  result.s     = iter.ch_counter;
+  result.is_ok = true;
+  return result;
 }
 
 /// @brief return @ref CString length in bytes
@@ -291,14 +300,17 @@ c_str_shrink_to_fit(CString* self)
 /// @param range_size
 /// @return is_ok[true]: return @ref CStr that has a pointer to character at @p
 ///         start_index, is_ok[false]: not found (or error happened)
-CStrResult
+CResultStr
 c_str_get(CString const* self, size_t start_index, size_t range_size)
 {
   assert(self);
 
-  CStrResult result = {0};
+  CResultStr result = {0};
 
-  if (start_index >= TO_IMPL(self)->len) return result;
+  if (start_index >= TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_index);
+    return result;
+  }
   result.str.data = self->data + start_index;
   result.str.len  = range_size;
   result.is_ok    = true;
@@ -311,11 +323,11 @@ c_str_get(CString const* self, size_t start_index, size_t range_size)
 /// @param ch a struct that you need to fill it manually
 /// @return is_ok[true]: return @ref CStr that has a pointer to character at @p
 ///         start_index, is_ok[false]: not found (or error happened)
-CStrResult
+CResultStr
 c_str_find(CString const* self, CChar ch)
 {
   CStringIter iter   = c_str_iter(NULL);
-  CStrResult  result = c_str_find_by_iter(self, ch, &iter);
+  CResultStr  result = c_str_find_by_iter(self, ch, &iter);
 
   return result;
 }
@@ -328,16 +340,22 @@ c_str_find(CString const* self, CChar ch)
 /// @param iter
 /// @return is_ok[true]: return @ref CStr that has a pointer to character at @p
 ///         start_index, is_ok[false]: not found (or error happened)
-CStrResult
+CResultStr
 c_str_find_by_iter(CString const* self, CChar ch, CStringIter* iter)
 {
   assert(self);
 
-  CStrResult result = {0};
-  if (!iter) return result;
-  if (iter->base.counter >= TO_IMPL(self)->len) return result;
+  CResultStr result = {0};
+  if (!iter) {
+    c_error_set(C_ERROR_invalid_iterator);
+    return result;
+  }
+  if (iter->base.counter >= TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_iterator);
+    return result;
+  }
 
-  CCharResult ch_res;
+  CResultChar ch_res;
   while ((ch_res = c_str_iter_next(self, iter)).is_ok) {
     if (memcmp(ch_res.ch.data, ch.data, ch.size) == 0) {
       result.str.data = ch_res.ch.data;
@@ -354,7 +372,7 @@ c_str_find_by_iter(CString const* self, CChar ch, CStringIter* iter)
 /// @param self
 /// @param cstr the input array of chars
 /// @return true/false
-bool
+CResultBool
 c_str_starts_with(CString const* self, CStr cstr)
 {
   return c_vec_starts_with((CVec const*)self, cstr.data, cstr.len,
@@ -365,7 +383,7 @@ c_str_starts_with(CString const* self, CStr cstr)
 /// @param self
 /// @param cstr the input array of chars
 /// @return true/false
-bool
+CResultBool
 c_str_ends_with(CString const* self, CStr cstr)
 {
   return c_vec_ends_with((CVec const*)self, cstr.data, cstr.len,
@@ -387,17 +405,20 @@ c_str_push(CString* self, CStr cstr)
 /// @param self
 /// @return is_ok[true]: return @ref CCharOwned
 ///         is_ok[false]: failed (or error happened)
-CCharOwnedResult
+CResultCharOwned
 c_str_pop(CString* self)
 {
   assert(self);
 
-  CCharOwnedResult result = {0};
-  if (TO_IMPL(self)->len == 0) return result;
+  CResultCharOwned result = {0};
+  if (TO_IMPL(self)->len == 0) {
+    c_error_set(C_ERROR_empty);
+    return result;
+  }
 
   CStringIter iter = c_str_iter(NULL);
   c_str_iter_rev(self, &iter);
-  CCharResult ch_result = c_str_iter_next(self, &iter);
+  CResultChar ch_result = c_str_iter_next(self, &iter);
   if (!ch_result.is_ok) return result;
 
   memcpy(result.ch.data, ch_result.ch.data, ch_result.ch.size);
@@ -493,7 +514,7 @@ c_str_trim(CString const* self)
   size_t index = 0;
   {
     CStringIter iter   = c_str_iter(NULL);
-    CCharResult result = {0};
+    CResultChar result = {0};
     while ((result = c_str_iter_next(self, &iter)).is_ok) {
       if (c_str_is_whitespace(result.ch)) {
         index += result.ch.size;
@@ -501,6 +522,9 @@ c_str_trim(CString const* self)
         break;
       }
     }
+
+    // if the input was just whitespace(s)
+    if (iter.base.counter == TO_IMPL(self)->len) return CSTR("");
   }
 
   /// from end
@@ -509,7 +533,7 @@ c_str_trim(CString const* self)
     CStringIter iter_end = c_str_iter(NULL);
     c_str_iter_rev(self, &iter_end);
 
-    CCharResult result = {0};
+    CResultChar result = {0};
     while ((result = c_str_iter_next(self, &iter_end)).is_ok) {
       if (c_str_is_whitespace(result.ch)) {
         index_end -= result.ch.size;
@@ -533,7 +557,7 @@ c_str_trim_start(CString const* self)
 
   CStringIter iter = c_str_iter(NULL);
 
-  CCharResult result = {0};
+  CResultChar result = {0};
   size_t      index  = 0;
   while ((result = c_str_iter_next(self, &iter)).is_ok) {
     if (c_str_is_whitespace(result.ch)) {
@@ -558,7 +582,7 @@ c_str_trim_end(CString const* self)
   CStringIter iter_end = c_str_iter(NULL);
   c_str_iter_rev(self, &iter_end);
 
-  CCharResult result = {0};
+  CResultChar result = {0};
   size_t      index  = TO_IMPL(self)->len - 1;
   while ((result = c_str_iter_next(self, &iter_end)).is_ok) {
     if (c_str_is_whitespace(result.ch)) {
@@ -582,7 +606,7 @@ c_str_trim_end(CString const* self)
 /// @return is_ok[true]: return none zero terminated substring
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CStrResult
+CResultStr
 c_str_split(CString const* self,
             CChar const    delimeters[],
             size_t         delimeters_len,
@@ -590,15 +614,18 @@ c_str_split(CString const* self,
 {
   assert(self);
 
-  CStrResult result = {0};
+  CResultStr result = {0};
 
   if (!iter) return result;
-  if (iter->base.counter >= TO_IMPL(self)->len) return result;
+  if (iter->base.counter >= TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_iterator);
+    return result;
+  }
 
   result.str.data = self->data + iter->base.counter;
 
   size_t      old_base_counter = iter->base.counter;
-  CCharResult ch_res;
+  CResultChar ch_res;
   bool        found          = false;
   size_t      delimeter_size = 0;
   while (!found && (ch_res = c_str_iter_next(self, iter)).is_ok) {
@@ -627,10 +654,10 @@ c_str_split(CString const* self,
 /// @return is_ok[true]: return none zero terminated substring
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CStrResult
+CResultStr
 c_str_split_by_whitespace(CString const* self, CStringIter* iter)
 {
-  CStrResult result
+  CResultStr result
       = c_str_split(self, c_whitespaces,
                     sizeof(c_whitespaces) / sizeof(*c_whitespaces), iter);
   return result;
@@ -644,7 +671,7 @@ c_str_split_by_whitespace(CString const* self, CStringIter* iter)
 /// @return is_ok[true]: return none zero terminated substring
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CStrResult
+CResultStr
 c_str_split_by_line(CString const* self, CStringIter* iter)
 {
   CChar const line_separators[] = {
@@ -652,7 +679,7 @@ c_str_split_by_line(CString const* self, CStringIter* iter)
       CCHAR("\r"),
   };
 
-  CStrResult result
+  CResultStr result
       = c_str_split(self, line_separators,
                     sizeof(line_separators) / sizeof(*line_separators), iter);
 
@@ -683,12 +710,18 @@ c_str_to_utf16(CString const* self)
   if (!u16vec) goto ON_ERROR;
 
   while (*utf8) {
-    CChar32Result char32_result = c_internal_str_utf8_to_utf32(utf8);
-    if (!char32_result.is_ok) goto ON_ERROR;
+    CResultChar32 char32_result = c_internal_str_utf8_to_utf32(utf8);
+    if (!char32_result.is_ok) {
+      c_error_set(C_ERROR_invalid_unicode);
+      goto ON_ERROR;
+    }
 
-    CChar16Result char16_result
+    CResultChar16 char16_result
         = c_internal_str_utf32_to_utf16(char32_result.ch.data);
-    if (!char16_result.is_ok) goto ON_ERROR;
+    if (!char16_result.is_ok) {
+      c_error_set(C_ERROR_invalid_unicode);
+      goto ON_ERROR;
+    }
 
     for (size_t iii = 0; iii < char16_result.ch.count; iii++) {
       bool status = c_vec_push(u16vec, &char16_result.ch.data[iii]);
@@ -739,10 +772,12 @@ c_str_from_utf16(CVec const* vec_u16)
         bool status = c_str_push(str, (CStr){buf, 4});
         if (!status) goto ON_ERROR;
       } else {
+        c_error_set(C_ERROR_invalid_unicode);
         goto ON_ERROR; // Error: Unmatched high surrogate
       }
     } else if (unit >= 0xDC00 && unit <= 0xDFFF) { // Low surrogate without a
                                                    // preceding high surrogate
+      c_error_set(C_ERROR_invalid_unicode);
       goto ON_ERROR; // Error: Invalid low surrogate
     } else {         // BMP character (U+0000 to U+FFFF)
       // UTF-8 encoding for a basic character (1 to 3 bytes)
@@ -831,10 +866,10 @@ c_str_iter(CStringIterStepCallback step_callback)
 /// @param data_len in bytes
 /// @return is_ok[true]: char pointer of none zero terminated utf-8 character
 ///         is_ok[false]: could not step more (reach the end) or error happened
-CIterElementResult
+CResultVoidPtr
 c_str_iter_default_step_callback(CStringIter* iter, char* data, size_t data_len)
 {
-  CIterElementResult result = {0};
+  CResultVoidPtr result = {0};
 
   if (iter->base.counter > data_len) return result;
   if (!iter->base.is_reversed && (iter->base.counter == data_len))
@@ -879,6 +914,7 @@ c_str_iter_default_step_callback(CStringIter* iter, char* data, size_t data_len)
   //     codepoint_size = 6;
   //   }
   else {
+    c_error_set(C_ERROR_invalid_unicode);
     return result;
   }
 
@@ -887,6 +923,7 @@ c_str_iter_default_step_callback(CStringIter* iter, char* data, size_t data_len)
   // Extract the remaining bytes of the character
   for (size_t iii = 1; iii < codepoint_size; ++iii) {
     if (((unsigned char)(((char*)data)[byte_count]) & 0xC0) != 0x80) {
+      c_error_set(C_ERROR_invalid_unicode);
       return result;
     }
     byte_count++;
@@ -894,7 +931,7 @@ c_str_iter_default_step_callback(CStringIter* iter, char* data, size_t data_len)
 
   iter->ch_counter++;
 
-  result.element        = data + iter->base.counter;
+  result.vp             = data + iter->base.counter;
   iter->current_ch_size = codepoint_size;
 
   if (!iter->base.is_reversed) iter->base.counter += codepoint_size;
@@ -922,15 +959,14 @@ c_str_iter_rev(CString const* self, CStringIter* iter)
 /// @return is_ok[true]: return none zero terminated @ref CChar
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CCharResult
+CResultChar
 c_str_iter_next(CString const* self, CStringIter* iter)
 {
-  CIterElementResult result
-      = ((CStringIterStepCallback)iter->base.step_callback)(iter, self->data,
-                                                            TO_IMPL(self)->len);
+  CResultVoidPtr result = ((CStringIterStepCallback)iter->base.step_callback)(
+      iter, self->data, TO_IMPL(self)->len);
 
-  return (CCharResult){
-      .ch    = (CChar){.data = result.element, .size = iter->current_ch_size},
+  return (CResultChar){
+      .ch    = (CChar){.data = result.vp, .size = iter->current_ch_size},
       .is_ok = result.is_ok};
 }
 
@@ -942,14 +978,14 @@ c_str_iter_next(CString const* self, CStringIter* iter)
 /// @return is_ok[true]: return none zero terminated @ref CChar
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CCharResult
+CResultChar
 c_str_iter_nth(CString const* self, CStringIter* iter, size_t index)
 {
-  CIterElementResult result
+  CResultVoidPtr result
       = c_iter_nth((CIter*)iter, index, self->data, TO_IMPL(self)->len);
 
-  return (CCharResult){
-      .ch    = (CChar){.data = result.element, .size = iter->current_ch_size},
+  return (CResultChar){
+      .ch    = (CChar){.data = result.vp, .size = iter->current_ch_size},
       .is_ok = result.is_ok};
 }
 
@@ -959,14 +995,14 @@ c_str_iter_nth(CString const* self, CStringIter* iter, size_t index)
 /// @return is_ok[true]: return none zero terminated @ref CChar
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CCharResult
+CResultChar
 c_str_iter_peek(CString const* self, CStringIter const* iter)
 {
-  CIterElementResult result
+  CResultVoidPtr result
       = c_iter_peek((CIter*)iter, self->data, TO_IMPL(self)->len);
 
-  return (CCharResult){
-      .ch    = (CChar){.data = result.element, .size = iter->current_ch_size},
+  return (CResultChar){
+      .ch    = (CChar){.data = result.vp, .size = iter->current_ch_size},
       .is_ok = result.is_ok};
 }
 
@@ -976,14 +1012,14 @@ c_str_iter_peek(CString const* self, CStringIter const* iter)
 /// @return is_ok[true]: return none zero terminated @ref CChar
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CCharResult
+CResultChar
 c_str_iter_first(CString const* self, CStringIter* iter)
 {
-  CIterElementResult result
+  CResultVoidPtr result
       = c_iter_first((CIter*)iter, self->data, TO_IMPL(self)->len);
 
-  return (CCharResult){
-      .ch    = (CChar){.data = result.element, .size = iter->current_ch_size},
+  return (CResultChar){
+      .ch    = (CChar){.data = result.vp, .size = iter->current_ch_size},
       .is_ok = result.is_ok};
 }
 
@@ -993,14 +1029,14 @@ c_str_iter_first(CString const* self, CStringIter* iter)
 /// @return is_ok[true]: return none zero terminated @ref CChar
 ///         is_ok[false]: end of @ref CString::data, invalid iter or other
 ///         errors
-CCharResult
+CResultChar
 c_str_iter_last(CString const* self, CStringIter* iter)
 {
-  CIterElementResult result
+  CResultVoidPtr result
       = c_iter_last((CIter*)iter, self->data, TO_IMPL(self)->len);
 
-  return (CCharResult){
-      .ch    = (CChar){.data = result.element, .size = iter->current_ch_size},
+  return (CResultChar){
+      .ch    = (CChar){.data = result.vp, .size = iter->current_ch_size},
       .is_ok = result.is_ok};
 }
 
@@ -1020,7 +1056,7 @@ c_str_reverse(CString const* self)
   CStringIter iter_end = c_str_iter(NULL);
   c_str_iter_rev(self, &iter_end);
 
-  CCharResult result;
+  CResultChar result;
   while ((result = c_str_iter_next(self, &iter_end)).is_ok) {
     c_str_push(rev_str, (CStr){result.ch.data, result.ch.size});
   }
@@ -1070,24 +1106,34 @@ c_str_format_va(CString*    self,
 {
   assert(self);
 
-  if (index > TO_IMPL(self)->len) return false;
-  if (format[format_len] != '\0') return false;
+  if (index > TO_IMPL(self)->len) {
+    c_error_set(C_ERROR_invalid_index);
+    return false;
+  }
+  if (format[format_len] != '\0') {
+    c_error_set(C_ERROR_none_terminated_raw_str);
+    return false;
+  }
 
-  errno = 0;
   va_list va_tmp;
   va_copy(va_tmp, va);
   int needed_len = vsnprintf(NULL, 0, format, va_tmp);
-  if (needed_len < 0) { return errno; }
+  if (needed_len < 0) {
+    c_error_set(C_ERROR_invalid_format);
+    return false;
+  }
 
   if ((size_t)needed_len >= GET_CAPACITY(self) - index) {
     bool status = c_str_set_capacity(self, GET_CAPACITY(self) + needed_len + 1);
     if (!status) return status;
   }
 
-  errno = 0;
   needed_len
       = vsnprintf(self->data + index, GET_CAPACITY(self) - index, format, va);
-  if (needed_len < 0) { return errno; }
+  if (needed_len < 0) {
+    c_error_set(C_ERROR_invalid_format);
+    return false;
+  }
 
   TO_IMPL(self)->len += needed_len;
   self->data[TO_IMPL(self)->len] = '\0';
@@ -1185,10 +1231,10 @@ c_str_destroy(CString* self)
 /*                                  Internal                                  */
 /******************************************************************************/
 
-CChar32Result
+CResultChar32
 c_internal_str_utf8_to_utf32(const char* utf8)
 {
-  CChar32Result        result = {0};
+  CResultChar32        result = {0};
   const unsigned char* bytes  = (const unsigned char*)utf8;
   if (bytes[0] < 0x80) {
     result.ch.data  = bytes[0];
@@ -1213,10 +1259,10 @@ c_internal_str_utf8_to_utf32(const char* utf8)
 }
 
 // Function to encode a Unicode code point into UTF-16
-CChar16Result
+CResultChar16
 c_internal_str_utf32_to_utf16(uint32_t codepoint)
 {
-  CChar16Result result = {0};
+  CResultChar16 result = {0};
 
   if (codepoint < 0x10000) {
     result.ch.data[0] = (uint16_t)codepoint;

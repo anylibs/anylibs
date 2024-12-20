@@ -36,7 +36,7 @@ UTEST_F(CStringTest, iter_next_ascii)
   char        gt[]       = "Open source :)";
   CStringIter iter_ascii = c_str_iter(NULL);
 
-  CCharResult result;
+  CResultChar result;
   size_t      counter = 0;
   while (
       (result = c_str_iter_next(utest_fixture->str_ascii, &iter_ascii)).is_ok) {
@@ -53,7 +53,7 @@ UTEST_F(CStringTest, iter_rev_ascii)
 
   char gt[] = "Open source :)";
 
-  CCharResult result;
+  CResultChar result;
   size_t      counter = sizeof(gt) - 2;
   while (
       (result = c_str_iter_next(utest_fixture->str_ascii, &iter_ascii)).is_ok) {
@@ -71,7 +71,7 @@ UTEST_F(CStringTest, iter_next_utf8)
                        "م", "ص", "د", "ر", " ", ":", ")"};
   size_t gt_sizes[] = {2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1};
 
-  CCharResult result;
+  CResultChar result;
   size_t      counter = 0;
   while (
       (result = c_str_iter_next(utest_fixture->str_utf8, &iter_utf8)).is_ok) {
@@ -91,7 +91,7 @@ UTEST_F(CStringTest, iter_rev_utf8)
   size_t gt_size    = 15;
   size_t gt_sizes[] = {2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1};
 
-  CCharResult result;
+  CResultChar result;
   size_t      counter = gt_size - 1;
   while (
       (result = c_str_iter_next(utest_fixture->str_utf8, &iter_utf8)).is_ok) {
@@ -125,13 +125,14 @@ UTEST_F(CStringTest, reverse_utf8)
 
 UTEST_F(CStringTest, count)
 {
-  size_t count = c_str_count(utest_fixture->str_utf8);
-  EXPECT_EQ(count, 15U);
+  CResultSizeT count = c_str_count(utest_fixture->str_utf8);
+  EXPECT_TRUE(count.is_ok);
+  EXPECT_EQ(count.s, 15U);
 }
 
 UTEST_F(CStringTest, search)
 {
-  CStrResult result = c_str_find(utest_fixture->str_utf8, CCHAR("ح"));
+  CResultStr result = c_str_find(utest_fixture->str_utf8, CCHAR("ح"));
   EXPECT_TRUE(result.is_ok);
 
   EXPECT_STREQ(result.str.data, &utest_fixture->str_utf8->data[8]);
@@ -139,7 +140,7 @@ UTEST_F(CStringTest, search)
 
 UTEST_F(CStringTest, pop)
 {
-  CCharOwnedResult result = {0};
+  CResultCharOwned result = {0};
 
   result = c_str_pop(utest_fixture->str_utf8);
   EXPECT_TRUE(result.is_ok);
@@ -210,7 +211,7 @@ UTEST_F(CStringTest, split)
   size_t            counter        = 0;
   char const* const gt[]           = {"مفتوح", "المصدر", ":)"};
 
-  CStrResult  result;
+  CResultStr  result;
   CStringIter iter = c_str_iter(NULL);
   while ((result = c_str_split(utest_fixture->str_utf8, delimeters,
                                delimeters_len, &iter))
@@ -228,10 +229,10 @@ UTEST_F(CStringTest, split_invalid)
   size_t counter        = 0;
 
   CStringIter iter        = c_str_iter(NULL);
-  CCharResult last_result = c_str_iter_last(utest_fixture->str_utf8, &iter);
+  CResultChar last_result = c_str_iter_last(utest_fixture->str_utf8, &iter);
   EXPECT_TRUE(last_result.is_ok);
 
-  CStrResult result;
+  CResultStr result;
   while ((result = c_str_split(utest_fixture->str_utf8, delimeters,
                                delimeters_len, &iter))
              .is_ok) {
@@ -246,7 +247,7 @@ UTEST_F(CStringTest, split_by_whitespace)
   char const* const gt[]    = {"مفتوح", "المصدر", ":)"};
 
   CStringIter iter = c_str_iter(NULL);
-  CStrResult  result;
+  CResultStr  result;
   while ((result = c_str_split_by_whitespace(utest_fixture->str_utf8, &iter))
              .is_ok) {
     EXPECT_STRNEQ(gt[counter], result.str.data, result.str.len);
@@ -265,7 +266,7 @@ UTEST_F(CStringTest, split_by_line)
       = c_str_create_from_raw(CSTR(input_raw), true, utest_fixture->allocator);
   ASSERT_TRUE(input);
 
-  CStrResult  result;
+  CResultStr  result;
   CStringIter iter = c_str_iter(NULL);
   while ((result = c_str_split_by_line(input, &iter)).is_ok) {
     EXPECT_STRNEQ(gt[counter], result.str.data, result.str.len);
@@ -310,11 +311,11 @@ UTEST_F(CStringTest, utf16)
 
   CIter iter = c_vec_iter(u16_vec, NULL);
 
-  CIterElementResult result;
-  size_t             counter = 0;
+  CResultVoidPtr result;
+  size_t         counter = 0;
   while (
       (result = c_iter_next(&iter, u16_vec->data, c_vec_len(u16_vec))).is_ok) {
-    EXPECT_EQ(gt[counter], *(uint16_t*)result.element);
+    EXPECT_EQ(gt[counter], *(uint16_t*)result.vp);
     counter++;
   }
 

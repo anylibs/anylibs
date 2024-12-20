@@ -22,17 +22,13 @@
 #ifndef ANYLIBS_ALLOCATOR_H
 #define ANYLIBS_ALLOCATOR_H
 
-#include "anylibs/error.h"
+#include "def.h"
 
 #include <stdalign.h>
 #include <stdbool.h>
 #include <stddef.h>
 
 typedef struct CAllocator CAllocator;
-typedef struct CAllocatorResizeResult {
-  void* memory;
-  bool  is_ok;
-} CAllocatorResizeResult;
 
 /// Default Allocator
 CAllocator* c_allocator_default(void);
@@ -58,7 +54,7 @@ void* c_allocator_alloc(CAllocator* self,
                         size_t      size,
                         size_t      alignment,
                         bool        zero_initialized);
-CAllocatorResizeResult
+CResultVoidPtr
      c_allocator_resize(CAllocator* self, void* memory, size_t new_size);
 void c_allocator_free(CAllocator* self, void* memory);
 

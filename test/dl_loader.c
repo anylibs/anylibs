@@ -7,9 +7,6 @@
 
 UTEST(CDLLoader, general)
 {
-  c_error_t err = C_ERROR_none;
-  (void)err;
-
 #ifdef _WIN32
   char const lib_path[] = ANYLIBS_C_TEST_ASSETS "assets/mylib.dll";
 #else
@@ -17,7 +14,6 @@ UTEST(CDLLoader, general)
 #endif
   CDLLoader* loader = c_dl_loader_create(CSTR(lib_path));
   EXPECT_TRUE(loader);
-  EXPECT_EQ_MSG(err, 0U, c_error_to_str(err));
 
   int (*add)(int, int)
       = (int (*)(int, int))c_dl_loader_get(loader, CSTR("add"));

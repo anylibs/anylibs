@@ -55,10 +55,10 @@ UTEST(CAllocator, default_realloc)
 
   void* mem = c_allocator_alloc(a, c_allocator_alignas(int, 10), true);
   EXPECT_TRUE(mem);
-  CAllocatorResizeResult result = c_allocator_resize(a, mem, sizeof(int) * 100);
+  CResultVoidPtr result = c_allocator_resize(a, mem, sizeof(int) * 100);
   EXPECT_TRUE(result.is_ok);
 
-  mem = result.memory;
+  mem = result.vp;
   EXPECT_EQ(c_allocator_mem_alignment(mem), alignof(int));
   EXPECT_EQ(c_allocator_mem_size(mem), sizeof(int) * 100);
 
@@ -101,10 +101,10 @@ UTEST(CAllocator, arena_realloc)
 
   void* mem = c_allocator_alloc(a, c_allocator_alignas(int, 10), true);
   EXPECT_TRUE(mem);
-  CAllocatorResizeResult result = c_allocator_resize(a, mem, sizeof(int) * 100);
+  CResultVoidPtr result = c_allocator_resize(a, mem, sizeof(int) * 100);
   EXPECT_TRUE(result.is_ok);
 
-  mem = result.memory;
+  mem = result.vp;
   EXPECT_NE(mem, NULL);
   EXPECT_EQ(c_allocator_mem_alignment(mem), alignof(int));
   EXPECT_EQ(c_allocator_mem_size(mem), sizeof(int) * 100);
@@ -151,10 +151,10 @@ UTEST(CAllocator, fixed_buffer_realloc)
 
   void* mem = c_allocator_alloc(a, c_allocator_alignas(int, 10), true);
   EXPECT_TRUE(mem);
-  CAllocatorResizeResult result = c_allocator_resize(a, mem, sizeof(int) * 100);
+  CResultVoidPtr result = c_allocator_resize(a, mem, sizeof(int) * 100);
   EXPECT_TRUE(result.is_ok);
 
-  mem = result.memory;
+  mem = result.vp;
   EXPECT_NE(mem, NULL);
   EXPECT_EQ(c_allocator_mem_alignment(mem), alignof(int));
   EXPECT_EQ(c_allocator_mem_size(mem), sizeof(int) * 100);

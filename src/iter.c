@@ -16,6 +16,7 @@
  */
 
 #include "anylibs/iter.h"
+#include "anylibs/error.h"
 
 #include <assert.h>
 
@@ -48,13 +49,13 @@ c_iter(size_t step_size, CIterStepCallback step_callback)
 /// @return element
 /// @return the state of the step, is_ok: false here means could not continue
 ///         stepping, true: return the next element
-CIterElementResult
+CResultVoidPtr
 c_iter_default_step_callback(CIter* self, void* data, size_t data_len)
 {
   assert(self);
 
-  CIterElementResult result            = {0};
-  size_t             pos_inc_direction = 1;
+  CResultVoidPtr result            = {0};
+  size_t         pos_inc_direction = 1;
 
   if (self->is_reversed) {
     if (self->is_done) return result;
@@ -67,8 +68,8 @@ c_iter_default_step_callback(CIter* self, void* data, size_t data_len)
     self->is_done = false;
   }
 
-  result.element = (uint8_t*)data + (self->counter * self->step_size);
-  result.is_ok   = true;
+  result.vp    = (uint8_t*)data + (self->counter * self->step_size);
+  result.is_ok = true;
   self->counter += pos_inc_direction;
 
   return result;
@@ -95,12 +96,12 @@ c_iter_rev(CIter* self, void* data, size_t data_len)
 /// @return element pointer to the next element
 /// @return the state of the step, is_ok: false here means could not continue
 ///         stepping, true: return the next element
-CIterElementResult
+CResultVoidPtr
 c_iter_next(CIter* self, void* data, size_t data_len)
 {
   assert(self);
 
-  CIterElementResult result = self->step_callback(self, data, data_len);
+  CResultVoidPtr result = self->step_callback(self, data, data_len);
   return result;
 }
 
@@ -110,18 +111,21 @@ c_iter_next(CIter* self, void* data, size_t data_len)
 /// @param data
 /// @param data_len
 /// @return is_ok: true -> nth element, false -> not found (or error happened)
-CIterElementResult
+CResultVoidPtr
 c_iter_nth(CIter* self, size_t index, void* data, size_t data_len)
 {
   assert(self);
 
-  CIterElementResult result = {0};
-  if (index >= data_len) return result;
+  CResultVoidPtr result = {0};
+  if (index >= data_len) {
+    c_error_set(C_ERROR_invalid_index);
+    return result;
+  }
 
   while ((result = c_iter_next(self, data, data_len)).is_ok) {
     if (self->counter - 1 == index) {
-      result.element = (uint8_t*)data + (index * self->step_size);
-      result.is_ok   = true;
+      result.vp    = (uint8_t*)data + (index * self->step_size);
+      result.is_ok = true;
       break;
     }
   }
@@ -135,13 +139,13 @@ c_iter_nth(CIter* self, size_t index, void* data, size_t data_len)
 /// @param data_len
 /// @return is_ok: true -> peek next element, false -> not found (or error
 ///         happened)
-CIterElementResult
+CResultVoidPtr
 c_iter_peek(CIter const* self, void* data, size_t data_len)
 {
   assert(self);
 
-  CIter              tmp    = *self;
-  CIterElementResult result = c_iter_next(&tmp, data, data_len);
+  CIter          tmp    = *self;
+  CResultVoidPtr result = c_iter_next(&tmp, data, data_len);
 
   return result;
 }
@@ -151,12 +155,12 @@ c_iter_peek(CIter const* self, void* data, size_t data_len)
 /// @param data
 /// @param data_len
 /// @return is_ok: true -> first element, false -> not found (or error happened)
-CIterElementResult
+CResultVoidPtr
 c_iter_first(CIter* self, void* data, size_t data_len)
 {
   assert(self);
 
-  CIterElementResult result = c_iter_nth(self, 0, data, data_len);
+  CResultVoidPtr result = c_iter_nth(self, 0, data, data_len);
   return result;
 }
 
@@ -165,11 +169,11 @@ c_iter_first(CIter* self, void* data, size_t data_len)
 /// @param data
 /// @param data_len
 /// @return is_ok: true -> last element, false -> not found (or error happened)
-CIterElementResult
+CResultVoidPtr
 c_iter_last(CIter* self, void* data, size_t data_len)
 {
   assert(self);
 
-  CIterElementResult result = c_iter_nth(self, data_len - 1, data, data_len);
+  CResultVoidPtr result = c_iter_nth(self, data_len - 1, data, data_len);
   return result;
 }
