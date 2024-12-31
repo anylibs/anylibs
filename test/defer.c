@@ -1,20 +1,3 @@
-/**
- * @file defer.c
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #include "anylibs/defer.h"
 
 #include <utest.h>
@@ -27,8 +10,7 @@ typedef struct S {
   int*   data;
 } S;
 
-void
-s_free(S* self)
+void s_free(S* self)
 {
   self->len = 0;
   free(self->data);

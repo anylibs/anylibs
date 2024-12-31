@@ -3,10 +3,9 @@ BasedOnStyle: LLVM
 BreakBeforeBraces: Linux
 PointerAlignment: Left
 AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveDeclarations: AcrossComments
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortBlocksOnASingleLine: Always
 AllowShortFunctionsOnASingleLine: None
-AlwaysBreakAfterReturnType: AllDefinitions
-BreakBeforeBinaryOperators: true
-BinPackParameters: false
+AlignTrailingComments: false
+ColumnLimit: 0

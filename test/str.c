@@ -3,13 +3,13 @@
 
 #include <utest.h>
 
-typedef struct CStringTest {
+typedef struct CStrBufTest {
   CAllocator* allocator;
-  CString*    str_ascii;
-  CString*    str_utf8;
-} CStringTest;
+  CStrBuf*    str_ascii;
+  CStrBuf*    str_utf8;
+} CStrBufTest;
 
-UTEST_F_SETUP(CStringTest)
+UTEST_F_SETUP(CStrBufTest)
 {
   utest_fixture->allocator = c_allocator_default();
   ASSERT_TRUE(utest_fixture->allocator);
@@ -23,7 +23,7 @@ UTEST_F_SETUP(CStringTest)
   ASSERT_TRUE(utest_fixture->str_utf8);
 }
 
-UTEST_F_TEARDOWN(CStringTest)
+UTEST_F_TEARDOWN(CStrBufTest)
 {
   (void)utest_result;
 
@@ -31,141 +31,129 @@ UTEST_F_TEARDOWN(CStringTest)
   c_str_destroy(utest_fixture->str_utf8);
 }
 
-UTEST_F(CStringTest, iter_next_ascii)
+UTEST_F(CStrBufTest, iter_next_ascii)
 {
-  char        gt[]       = "Open source :)";
-  CStringIter iter_ascii = c_str_iter(NULL);
+  char  gt[]       = "Open source :)";
+  CIter iter_ascii = c_str_iter(utest_fixture->str_ascii);
 
-  CResultChar result;
-  size_t      counter = 0;
-  while (
-      (result = c_str_iter_next(utest_fixture->str_ascii, &iter_ascii)).is_ok) {
-    EXPECT_EQ(*result.ch.data, gt[counter]);
-    EXPECT_EQ(result.ch.size, sizeof(char));
+  CStr   result;
+  size_t counter = 0;
+  while (c_str_iter_next(&iter_ascii, &result)) {
+    EXPECT_EQ(gt[counter], *result.data);
+    EXPECT_EQ(sizeof(char), result.len);
     counter++;
   }
 }
 
-UTEST_F(CStringTest, iter_rev_ascii)
+UTEST_F(CStrBufTest, iter_rev_ascii)
 {
-  CStringIter iter_ascii = c_str_iter(NULL);
-  c_str_iter_rev(utest_fixture->str_ascii, &iter_ascii);
+  CIter iter_ascii = c_str_iter(utest_fixture->str_ascii);
 
   char gt[] = "Open source :)";
 
-  CResultChar result;
-  size_t      counter = sizeof(gt) - 2;
-  while (
-      (result = c_str_iter_next(utest_fixture->str_ascii, &iter_ascii)).is_ok) {
-    EXPECT_EQ(*result.ch.data, gt[counter]);
-    EXPECT_EQ(result.ch.size, sizeof(char));
+  CStr   result;
+  size_t counter = sizeof(gt) - 2;
+  while (c_str_iter_prev(&iter_ascii, &result)) {
+    EXPECT_EQ(*result.data, gt[counter]);
+    EXPECT_EQ(result.len, sizeof(char));
     counter--;
   }
 }
 
-UTEST_F(CStringTest, iter_next_utf8)
+UTEST_F(CStrBufTest, iter_next_utf8)
 {
-  CStringIter iter_utf8 = c_str_iter(NULL);
+  CIter iter_utf8 = c_str_iter(utest_fixture->str_utf8);
 
   char*  gt[]       = {"م", "ف", "ت", "و", "ح", " ", "ا", "ل",
                        "م", "ص", "د", "ر", " ", ":", ")"};
   size_t gt_sizes[] = {2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1};
 
-  CResultChar result;
-  size_t      counter = 0;
-  while (
-      (result = c_str_iter_next(utest_fixture->str_utf8, &iter_utf8)).is_ok) {
-    EXPECT_STRNEQ(result.ch.data, gt[counter], result.ch.size);
-    EXPECT_EQ(result.ch.size, gt_sizes[counter]);
+  CStr   result;
+  size_t counter = 0;
+  while (c_str_iter_next(&iter_utf8, &result)) {
+    EXPECT_STRNEQ(result.data, gt[counter], result.len);
+    EXPECT_EQ(result.len, gt_sizes[counter]);
     counter++;
   }
 }
 
-UTEST_F(CStringTest, iter_rev_utf8)
+UTEST_F(CStrBufTest, iter_rev_utf8)
 {
-  CStringIter iter_utf8 = c_str_iter(NULL);
-  c_str_iter_rev(utest_fixture->str_utf8, &iter_utf8);
+  CIter iter_utf8 = c_str_iter(utest_fixture->str_utf8);
 
-  char*  gt[]       = {"م", "ف", "ت", "و", "ح", " ", "ا", "ل",
-                       "م", "ص", "د", "ر", " ", ":", ")"};
-  size_t gt_size    = 15;
+  char*  gt[]       = {"م", "ف", "ت", "و", "ح", " ", "ا", "ل", "م", "ص", "د", "ر", " ", ":", ")"};
   size_t gt_sizes[] = {2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1};
+  size_t gt_size    = 15;
 
-  CResultChar result;
-  size_t      counter = gt_size - 1;
-  while (
-      (result = c_str_iter_next(utest_fixture->str_utf8, &iter_utf8)).is_ok) {
-    EXPECT_STRNEQ(result.ch.data, gt[counter], result.ch.size);
-    EXPECT_EQ(result.ch.size, gt_sizes[counter]);
+  CStr   result;
+  size_t counter = gt_size - 1;
+  while (c_str_iter_prev(&iter_utf8, &result)) {
+    EXPECT_STRNEQ(result.data, gt[counter], result.len);
+    EXPECT_EQ(result.len, gt_sizes[counter]);
     counter--;
   }
 }
 
-UTEST_F(CStringTest, reverse_ascii)
+UTEST_F(CStrBufTest, reverse_ascii)
 {
   char gt[] = "): ecruos nepO";
 
-  CString* reversed_str = c_str_reverse(utest_fixture->str_ascii);
+  CStrBuf* reversed_str = c_str_reverse(utest_fixture->str_ascii);
   EXPECT_TRUE(reversed_str);
   EXPECT_STRNEQ(reversed_str->data, gt, sizeof(gt) - 1);
 
   c_str_destroy(reversed_str);
 }
 
-UTEST_F(CStringTest, reverse_utf8)
+UTEST_F(CStrBufTest, reverse_utf8)
 {
   char gt[] = "): ردصملا حوتفم";
 
-  CString* reversed_str = c_str_reverse(utest_fixture->str_utf8);
+  CStrBuf* reversed_str = c_str_reverse(utest_fixture->str_utf8);
   EXPECT_TRUE(reversed_str);
   EXPECT_STRNEQ(reversed_str->data, (gt), sizeof(gt) - 1);
 
   c_str_destroy(reversed_str);
 }
 
-UTEST_F(CStringTest, count)
+UTEST_F(CStrBufTest, count)
 {
-  CResultSizeT count = c_str_count(utest_fixture->str_utf8);
-  EXPECT_TRUE(count.is_ok);
-  EXPECT_EQ(count.s, 15U);
+  int count = c_str_count(utest_fixture->str_utf8);
+  EXPECT_EQ(count, 15);
 }
 
-UTEST_F(CStringTest, search)
+UTEST_F(CStrBufTest, search)
 {
-  CResultStr result = c_str_find(utest_fixture->str_utf8, CCHAR("ح"));
-  EXPECT_TRUE(result.is_ok);
+  CStr result;
+  bool status = c_str_find(utest_fixture->str_utf8, CSTR("ح"), &result);
+  EXPECT_TRUE(status);
 
-  EXPECT_STREQ(result.str.data, &utest_fixture->str_utf8->data[8]);
+  EXPECT_STREQ(result.data, &utest_fixture->str_utf8->data[8]);
 }
 
-UTEST_F(CStringTest, pop)
+UTEST_F(CStrBufTest, pop)
 {
-  CResultCharOwned result = {0};
+  CChar result = {0};
 
-  result = c_str_pop(utest_fixture->str_utf8);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_STREQ(")", result.ch.data);
+  EXPECT_TRUE(c_str_pop(utest_fixture->str_utf8, &result));
+  EXPECT_STREQ(")", result.data);
 
-  result = c_str_pop(utest_fixture->str_utf8);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_STREQ(":", result.ch.data);
+  EXPECT_TRUE(c_str_pop(utest_fixture->str_utf8, &result));
+  EXPECT_STREQ(":", result.data);
 
-  result = c_str_pop(utest_fixture->str_utf8);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_STREQ(" ", result.ch.data);
+  EXPECT_TRUE(c_str_pop(utest_fixture->str_utf8, &result));
+  EXPECT_STREQ(" ", result.data);
 
-  result = c_str_pop(utest_fixture->str_utf8);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_STREQ("ر", result.ch.data);
+  EXPECT_TRUE(c_str_pop(utest_fixture->str_utf8, &result));
+  EXPECT_STREQ("ر", result.data);
 }
 
-UTEST(CString, trim_start)
+UTEST(CStrBuf, trim_start)
 {
   CAllocator* allocator = c_allocator_default();
   ASSERT_TRUE(allocator);
 
-  CString* str
-      = c_str_create_from_raw(CSTR("  اللغة العربية"), false, allocator);
+  CStrBuf* str = c_str_create_from_raw(CSTR("  اللغة العربية"), false, allocator);
   ASSERT_TRUE(str);
 
   CStr trimmed_str = c_str_trim_start(str);
@@ -174,13 +162,12 @@ UTEST(CString, trim_start)
   c_str_destroy(str);
 }
 
-UTEST(CString, trim_end)
+UTEST(CStrBuf, trim_end)
 {
   CAllocator* allocator = c_allocator_default();
   ASSERT_TRUE(allocator);
 
-  CString* str
-      = c_str_create_from_raw(CSTR("اللغة العربية  "), false, allocator);
+  CStrBuf* str = c_str_create_from_raw(CSTR("اللغة العربية  "), false, allocator);
   ASSERT_TRUE(str);
 
   CStr trimmed_str = c_str_trim_end(str);
@@ -189,13 +176,12 @@ UTEST(CString, trim_end)
   c_str_destroy(str);
 }
 
-UTEST(CString, trim)
+UTEST(CStrBuf, trim)
 {
   CAllocator* allocator = c_allocator_default();
   ASSERT_TRUE(allocator);
 
-  CString* str
-      = c_str_create_from_raw(CSTR("  اللغة العربية  "), false, allocator);
+  CStrBuf* str = c_str_create_from_raw(CSTR("  اللغة العربية  "), false, allocator);
   ASSERT_TRUE(str);
 
   CStr trimmed_str = c_str_trim(str);
@@ -204,72 +190,66 @@ UTEST(CString, trim)
   c_str_destroy(str);
 }
 
-UTEST_F(CStringTest, split)
+UTEST_F(CStrBufTest, split)
 {
-  CChar             delimeters[]   = {CCHAR(" ")};
+  CChar             delimeters[]   = {(CChar){" ", 1}};
   size_t            delimeters_len = sizeof(delimeters) / sizeof(*delimeters);
   size_t            counter        = 0;
   char const* const gt[]           = {"مفتوح", "المصدر", ":)"};
 
-  CResultStr  result;
-  CStringIter iter = c_str_iter(NULL);
-  while ((result = c_str_split(utest_fixture->str_utf8, delimeters,
-                               delimeters_len, &iter))
-             .is_ok) {
-    EXPECT_STRNEQ(gt[counter], result.str.data, result.str.len);
+  CStr  result;
+  CIter iter = c_str_iter(utest_fixture->str_utf8);
+  while (c_str_iter_split(&iter, delimeters, delimeters_len, &result)) {
+    EXPECT_STRNEQ(gt[counter], result.data, result.len);
     counter++;
   }
   EXPECT_EQ(counter, sizeof(gt) / sizeof(*gt));
 }
 
-UTEST_F(CStringTest, split_invalid)
+UTEST_F(CStrBufTest, split_invalid)
 {
-  CChar  delimeters[]   = {CCHAR(" ")};
+  CChar  delimeters[]   = {(CChar){" ", 1}};
   size_t delimeters_len = sizeof(delimeters) / sizeof(*delimeters);
   size_t counter        = 0;
 
-  CStringIter iter        = c_str_iter(NULL);
-  CResultChar last_result = c_str_iter_last(utest_fixture->str_utf8, &iter);
-  EXPECT_TRUE(last_result.is_ok);
+  CIter iter        = c_str_iter(utest_fixture->str_utf8);
+  CStr  last_result = c_str_iter_last(&iter);
+  EXPECT_STREQ(")", last_result.data);
 
-  CResultStr result;
-  while ((result = c_str_split(utest_fixture->str_utf8, delimeters,
-                               delimeters_len, &iter))
-             .is_ok) {
+  CStr result;
+  while (c_str_iter_split(&iter, delimeters, delimeters_len, &result)) {
     counter++;
   }
   EXPECT_EQ(counter, 0U);
 }
 
-UTEST_F(CStringTest, split_by_whitespace)
+UTEST_F(CStrBufTest, split_by_whitespace)
 {
   size_t            counter = 0;
   char const* const gt[]    = {"مفتوح", "المصدر", ":)"};
 
-  CStringIter iter = c_str_iter(NULL);
-  CResultStr  result;
-  while ((result = c_str_split_by_whitespace(utest_fixture->str_utf8, &iter))
-             .is_ok) {
-    EXPECT_STRNEQ(gt[counter], result.str.data, result.str.len);
+  CIter iter = c_str_iter(utest_fixture->str_utf8);
+  CStr  result;
+  while (c_str_iter_split_by_whitespace(&iter, &result)) {
+    EXPECT_STRNEQ(gt[counter], result.data, result.len);
     counter++;
   }
   EXPECT_EQ(counter, sizeof(gt) / sizeof(*gt));
 }
 
-UTEST_F(CStringTest, split_by_line)
+UTEST_F(CStrBufTest, split_by_line)
 {
   size_t            counter     = 0;
   char const* const gt[]        = {"مفتوح", "المصدر", ":)"};
   char              input_raw[] = "مفتوح\nالمصدر\r\n:)";
 
-  CString* input
-      = c_str_create_from_raw(CSTR(input_raw), true, utest_fixture->allocator);
+  CStrBuf* input = c_str_create_from_raw(CSTR(input_raw), true, utest_fixture->allocator);
   ASSERT_TRUE(input);
 
-  CResultStr  result;
-  CStringIter iter = c_str_iter(NULL);
-  while ((result = c_str_split_by_line(input, &iter)).is_ok) {
-    EXPECT_STRNEQ(gt[counter], result.str.data, result.str.len);
+  CStr  result;
+  CIter iter = c_str_iter(input);
+  while (c_str_iter_split_by_line(&iter, &result)) {
+    EXPECT_STRNEQ(gt[counter], result.data, result.len);
     counter++;
   }
   EXPECT_EQ(counter, sizeof(gt) / sizeof(*gt));
@@ -277,10 +257,9 @@ UTEST_F(CStringTest, split_by_line)
   c_str_destroy(input);
 }
 
-UTEST_F(CStringTest, ascii_uppercase)
+UTEST_F(CStrBufTest, ascii_uppercase)
 {
-  CString* str = c_str_create_from_raw(CSTR("open source :)"), true,
-                                       utest_fixture->allocator);
+  CStrBuf* str = c_str_create_from_raw(CSTR("open source :)"), true, utest_fixture->allocator);
   ASSERT_TRUE(str);
 
   c_str_to_ascii_uppercase(str);
@@ -289,10 +268,9 @@ UTEST_F(CStringTest, ascii_uppercase)
   c_str_destroy(str);
 }
 
-UTEST_F(CStringTest, ascii_lowercase)
+UTEST_F(CStrBufTest, ascii_lowercase)
 {
-  CString* str = c_str_create_from_raw(CSTR("OPEN SOURCE :)"), true,
-                                       utest_fixture->allocator);
+  CStrBuf* str = c_str_create_from_raw(CSTR("OPEN SOURCE :)"), true, utest_fixture->allocator);
   ASSERT_TRUE(str);
 
   c_str_to_ascii_lowercase(str);
@@ -301,25 +279,22 @@ UTEST_F(CStringTest, ascii_lowercase)
   c_str_destroy(str);
 }
 
-UTEST_F(CStringTest, utf16)
+UTEST_F(CStrBufTest, utf16)
 {
-  uint16_t gt[]
-      = {0x0645, 0x0641, 0x062a, 0x0648, 0x062d, 0x0020, 0x0627, 0x0644,
-         0x0645, 0x0635, 0x062f, 0x0631, 0x0020, 0x003a, 0x029};
-  CVec* u16_vec = c_str_to_utf16(utest_fixture->str_utf8);
+  uint16_t gt[]    = {0x0645, 0x0641, 0x062a, 0x0648, 0x062d, 0x0020, 0x0627, 0x0644, 0x0645, 0x0635, 0x062f, 0x0631, 0x0020, 0x003a, 0x029};
+  CVec*    u16_vec = c_str_to_utf16(utest_fixture->str_utf8);
   EXPECT_TRUE(u16_vec);
 
-  CIter iter = c_vec_iter(u16_vec, NULL);
+  CIter iter = c_vec_iter(u16_vec);
 
-  CResultVoidPtr result;
-  size_t         counter = 0;
-  while (
-      (result = c_iter_next(&iter, u16_vec->data, c_vec_len(u16_vec))).is_ok) {
-    EXPECT_EQ(gt[counter], *(uint16_t*)result.vp);
+  void*  result;
+  size_t counter = 0;
+  while (c_iter_next(&iter, &result)) {
+    EXPECT_EQ(gt[counter], *(uint16_t*)result);
     counter++;
   }
 
-  CString* str = c_str_from_utf16(u16_vec);
+  CStrBuf* str = c_str_from_utf16(u16_vec);
   ASSERT_TRUE(str);
 
   EXPECT_EQ(c_str_compare(str, utest_fixture->str_utf8), 0);
@@ -328,10 +303,10 @@ UTEST_F(CStringTest, utf16)
   c_str_destroy(str);
 }
 
-UTEST(CString, format)
+UTEST(CStrBuf, format)
 {
   char     gt[] = "Name: SomeOne Junior, Age: 99, Height: 199CM";
-  CString* str  = c_str_create_with_capacity(10, NULL, false);
+  CStrBuf* str  = c_str_create_with_capacity(10, NULL, false);
   ASSERT_TRUE(str);
 
   char const format[] = "Name: %s, Age: %u, Height: %uCM";
@@ -346,9 +321,9 @@ UTEST(CString, format)
 
 /// this test case will not even compile (at least on linux)
 /// and this is sooooo good
-// UTEST(CString, format_invalid)
+// UTEST(CStrBuf, format_invalid)
 // {
-//   CString* str;
+//   CStrBuf* str;
 //   int      err = c_str_create_with_capacity(10, NULL, false, &str);
 //   ASSERT_EQ_MSG(err, 0, c_error_to_str(err));
 //   char gt[] = "Name: SomeOne Junior, Age: 99, Height: 199CM";

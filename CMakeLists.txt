@@ -7,6 +7,7 @@ project(anylibs LANGUAGES C)
 # compiler options
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (MSVC)
     add_compile_options(
         /W4 # warning level 4
@@ -40,7 +41,7 @@ else()
     add_link_options($<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>)
 endif()
 
-if (ENABLE_TESTING)
+if (ANYLIBS_ENABLE_TESTING)
     message("-- testing has been enabled")
     enable_testing()
     add_subdirectory(test)

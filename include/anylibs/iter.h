@@ -1,60 +1,23 @@
-/**
- * @file iter.h
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #ifndef ANYLIBS_ITER_H
 #define ANYLIBS_ITER_H
-
-#include "allocator.h"
-#include "def.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct CIter CIter;
-typedef CResultVoidPtr (*CIterStepCallback)(CIter* self,
-                                            void*  data,
-                                            size_t data_len);
+typedef struct CIter {
+  void*  data;
+  size_t data_size;
+  void*  ptr;
+  size_t step_size;
+} CIter;
 
-struct CIter {
-  size_t            counter;
-  size_t            step_size;     ///< this is usually the element size
-  CIterStepCallback step_callback; ///< this is mainly act like c_iter_next for
-                                   ///< whatever the direction
-  bool is_reversed;                ///< thiis is true when go backward
-  bool is_done; ///< this is used only if @ref CIter::is_reversed is true
-};
-
-CIter c_iter(size_t step_size, CIterStepCallback step_callback);
-
-CResultVoidPtr
-c_iter_default_step_callback(CIter* self, void* data, size_t data_len);
-
-void c_iter_rev(CIter* self, void* data, size_t data_len);
-
-CResultVoidPtr c_iter_next(CIter* self, void* data, size_t data_len);
-
-CResultVoidPtr
-c_iter_nth(CIter* self, size_t index, void* data, size_t data_len);
-
-CResultVoidPtr c_iter_peek(CIter const* self, void* data, size_t data_len);
-
-CResultVoidPtr c_iter_first(CIter* self, void* data, size_t data_len);
-
-CResultVoidPtr c_iter_last(CIter* self, void* data, size_t data_len);
+CIter c_iter(void* data, size_t data_size, size_t step_size /* , bool reversed */); // create new iter, step_size usually the sizeof(T), reversed[false]: start from the end(this is only useful with c_iter_prev)
+bool  c_iter_next(CIter* self, void** out_data); // get the next element, out_data could be NULL and this will advance the iterator only
+bool  c_iter_prev(CIter* self, void** out_data); // get the previous element, out_data could be NULL and this will advance the iterator only
+bool  c_iter_nth(CIter* self, size_t index, void** out_data); // get nth element at index, and advance the iterator to index, out_data could be NULL and this will advance the iterator only
+bool  c_iter_peek(CIter const* self, void** out_data); // get the next element without advancing the iterator, out_data could be NULL but this make this function useless
+void* c_iter_first(CIter* self); // get the first element
+void* c_iter_last(CIter* self); // get the last element
 
 #endif // ANYLIBS_ITER_H

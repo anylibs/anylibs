@@ -1,20 +1,3 @@
-/**
- * @file vec.c
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #include "anylibs/vec.h"
 
 #include <stdio.h>
@@ -50,9 +33,10 @@ UTEST_F_TEARDOWN(CVecTest)
 
 UTEST_F(CVecTest, pop)
 {
-  CResultVoidPtr data = c_vec_pop(utest_fixture->vec);
-  EXPECT_TRUE(data.is_ok);
-  EXPECT_EQ(16, *(int*)data.vp);
+  int data;
+  EXPECT_TRUE(c_vec_pop(utest_fixture->vec, &data));
+  EXPECT_TRUE(data);
+  EXPECT_EQ(16, data);
 }
 
 UTEST_F(CVecTest, remove_range)
@@ -87,12 +71,10 @@ UTEST_F(CVecTest, iter)
   size_t counter = 0;
   int    gt[]    = {12, 13, 14, 15, 16};
 
-  CResultVoidPtr result;
-  CIter          iter = c_vec_iter(utest_fixture->vec, NULL);
-  while ((result = c_iter_next(&iter, utest_fixture->vec->data,
-                               c_vec_len(utest_fixture->vec)))
-             .is_ok) {
-    EXPECT_EQ(*(int*)result.vp, gt[counter++]);
+  void* result;
+  CIter iter = c_vec_iter(utest_fixture->vec);
+  while (c_iter_next(&iter, &result)) {
+    EXPECT_EQ(*(int*)result, gt[counter++]);
   }
 }
 
@@ -135,25 +117,26 @@ UTEST_F(CVecTest, reverse)
 
 UTEST_F(CVecTest, search)
 {
-  CResultVoidPtr result = c_vec_find(utest_fixture->vec, &(int){13}, cmp);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_EQ(13, *(int*)result.vp);
+  void* result;
+  EXPECT_TRUE(c_vec_find(utest_fixture->vec, &(int){13}, cmp, &result));
+  EXPECT_TRUE(result);
+  EXPECT_EQ(13, *(int*)result);
 
-  result = c_vec_binary_find(utest_fixture->vec, &(int){13}, cmp);
-  EXPECT_TRUE(result.is_ok);
-  EXPECT_EQ(13, *(int*)result.vp);
+  c_vec_binary_find(utest_fixture->vec, &(int){13}, cmp, &result);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(13, *(int*)result);
 
-  result = c_vec_find(utest_fixture->vec, &(int){20}, cmp);
-  EXPECT_FALSE(result.is_ok);
-  result = c_vec_binary_find(utest_fixture->vec, &(int){20}, cmp);
-  EXPECT_FALSE(result.is_ok);
+  bool status = c_vec_find(utest_fixture->vec, &(int){20}, cmp, &result);
+  EXPECT_FALSE(status);
+  status = c_vec_binary_find(utest_fixture->vec, &(int){20}, cmp, &result);
+  EXPECT_FALSE(status);
 }
 
 UTEST_F(CVecTest, sort)
 {
-  EXPECT_TRUE(c_vec_is_sorted(utest_fixture->vec, cmp));
+  EXPECT_TRUE(c_vec_is_sorted(utest_fixture->vec, cmp) == 0);
   EXPECT_TRUE(c_vec_sort(utest_fixture->vec, cmp_inv));
-  EXPECT_TRUE(c_vec_is_sorted_inv(utest_fixture->vec, cmp));
+  EXPECT_TRUE(c_vec_is_sorted(utest_fixture->vec, cmp_inv) == 0);
 
   EXPECT_EQ(((int*)utest_fixture->vec->data)[0], 16);
   EXPECT_EQ(((int*)utest_fixture->vec->data)[1], 15);
@@ -164,27 +147,20 @@ UTEST_F(CVecTest, sort)
 
 UTEST_F(CVecTest, starts_with)
 {
-  CResultBool starts_with
-      = c_vec_starts_with(utest_fixture->vec, (int[]){12, 13, 14}, 3, cmp);
-  EXPECT_TRUE(starts_with.is_ok);
-  EXPECT_TRUE(starts_with.is_true);
+  int starts_with = c_vec_starts_with(utest_fixture->vec, (int[]){12, 13, 14}, 3, cmp);
+  EXPECT_TRUE(starts_with == 0);
 
-  starts_with
-      = c_vec_starts_with(utest_fixture->vec, (int[]){12, 12, 12}, 3, cmp);
-  EXPECT_TRUE(starts_with.is_ok);
-  EXPECT_FALSE(starts_with.is_true);
+  starts_with = c_vec_starts_with(utest_fixture->vec, (int[]){12, 12, 12}, 3, cmp);
+  EXPECT_FALSE(starts_with == 0);
 }
 
 UTEST_F(CVecTest, ends_with)
 {
-  CResultBool ends_with
-      = c_vec_ends_with(utest_fixture->vec, (int[]){14, 15, 16}, 3, cmp);
-  EXPECT_TRUE(ends_with.is_ok);
-  EXPECT_TRUE(ends_with.is_true);
+  int ends_with = c_vec_ends_with(utest_fixture->vec, (int[]){14, 15, 16}, 3, cmp);
+  EXPECT_TRUE(ends_with == 0);
 
   ends_with = c_vec_ends_with(utest_fixture->vec, (int[]){12, 12, 12}, 3, cmp);
-  EXPECT_TRUE(ends_with.is_ok);
-  EXPECT_FALSE(ends_with.is_true);
+  EXPECT_FALSE(ends_with == 0);
 }
 
 UTEST_F(CVecTest, rotate_right)
@@ -339,8 +315,8 @@ UTEST(CVec, fill_with_repeat)
 UTEST(CVec, replace)
 {
   int const gt[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-  CVec* vec = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
-                                    sizeof(int), true, NULL);
+  CVec*     vec  = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
+                                         sizeof(int), true, NULL);
   EXPECT_TRUE(vec);
 
   EXPECT_TRUE(c_vec_replace(vec, 2, 2, (int[]){3, 4}, 2));
@@ -352,8 +328,8 @@ UTEST(CVec, replace)
 UTEST(CVec, replace_with_smaller_data)
 {
   int const gt[] = {1, 2, 3, 5, 6, 7, 8, 9, 0};
-  CVec* vec = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
-                                    sizeof(int), true, NULL);
+  CVec*     vec  = c_vec_create_from_raw((int[]){1, 2, 0, 0, 5, 6, 7, 8, 9, 0}, 10,
+                                         sizeof(int), true, NULL);
   EXPECT_TRUE(vec);
 
   EXPECT_TRUE(c_vec_replace(vec, 2, 2, (int[]){3}, 1));
@@ -377,14 +353,12 @@ UTEST(CVec, replace_with_larger_data)
 
 /******************************************************************************/
 
-int
-cmp(void const* a, void const* b)
+int cmp(void const* a, void const* b)
 {
   return *(int*)a - *(int*)b;
 }
 
-int
-cmp_inv(void const* a, void const* b)
+int cmp_inv(void const* a, void const* b)
 {
   return *(int*)b - *(int*)a;
 }

@@ -6,11 +6,11 @@ PROJECT_BRIEF          = "Standard library for C"
 PROJECT_VERSION        = 1.0.0
 
 # Input files and directories
-INPUT                  = ./src ./include ./README.md
+INPUT                  = ./include ./README.md
 RECURSIVE              = YES
 
 # File extensions to process
-FILE_PATTERNS          = *.c *.h *.cpp *.hpp
+FILE_PATTERNS          = *.h *.hpp
 
 # Output settings
 OUTPUT_DIRECTORY       = ./docs

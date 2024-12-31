@@ -1,28 +1,12 @@
-/**
- * @file error.h
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #include "anylibs/error.h"
 
+#include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 
 #define __FILENAME__ strrchr(f, '/') + 1
 
-char const*
-c_error_to_str(c_error_t code)
+char const* c_error_to_str(c_error_t code)
 {
   switch (code) {
   case C_ERROR_none:
@@ -39,6 +23,10 @@ c_error_to_str(c_error_t code)
     return "invalid index";
   case C_ERROR_invalid_element_size:
     return "invalid element size";
+  case C_ERROR_invalid_data:
+    return "invalid data";
+  case C_ERROR_null_ptr:
+    return "null pointer";
   case C_ERROR_capacity_full:
     return "capacity is full";
   case C_ERROR_empty:
@@ -69,74 +57,89 @@ c_error_to_str(c_error_t code)
     return "filesystem invalid open mode";
   case C_ERROR_fs_invalid_path:
     return "filesystem invalid path";
-  default:
+  case C_ERROR_fs_close_failed:
+    return "closing file/dir failed";
+  case C_ERROR_fs_is_dir:
+    return "is a directory";
+  case C_ERROR_fs_not_dir:
+    return "is not a directory";
+  default: {
+#ifdef _WIN32
+    /// FIXME:
     return "";
+#else
+    return strerror(code);
+#endif
+  }
   }
 }
 
-#if ENABLE_ERROR_CALLBACK
+#if ANYLIBS_ENABLE_ERROR_CALLBACK
 #include "anylibs/str.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 
-static void c_internal_error_callback_fn(c_error_t err,
-                                         CStr      function_name,
-                                         CStr      file_name,
-                                         size_t    line_number,
-                                         void*     user_data);
+static void c_error_callback_internal_fn(c_error_t err, CStr function_name,
+                                         CStr file_name, size_t line_number,
+                                         void* user_data);
 
 #ifdef _WIN32
 #include <Winnt.h>
-static bool c_internal_error_initiated = false;
+static bool      c_error_initiated = false;
+static c_error_t c_error           = C_ERROR_none;
 #else
-static _Atomic(bool) c_internal_error_initiated = false;
+static _Atomic(bool)      c_error_initiated = false;
+static _Atomic(c_error_t) c_error           = C_ERROR_none;
 #endif
-static CErrorCallback c_internal_error_callback  = c_internal_error_callback_fn;
+static CErrorCallback c_error_callback_internal  = c_error_callback_internal_fn;
 static void*          c_internal_error_user_data = NULL;
 
-void
-c_error_register_once(CErrorCallback callback, void* user_data)
+void c_error_register_once(CErrorCallback callback, void* user_data)
 {
 
 #ifdef _WIN32
-  bool old_state
-      = InterlockedCompareExchange(&c_internal_error_initiated, true, false);
-  if (old_state) return;
+  bool old_state = InterlockedCompareExchange(&c_error_initiated, true, false);
+  if (old_state)
+    return;
 #else
-  if (!c_internal_error_initiated) {
-    c_internal_error_initiated = true;
+  if (!c_error_initiated) {
+    c_error_initiated = true;
   } else {
     return;
   }
 #endif
 
-  c_internal_error_callback  = callback;
+  c_error_callback_internal  = callback;
   c_internal_error_user_data = user_data;
 }
 
-void
-c_internal_error_callback_fn(c_error_t err,
-                             CStr      function_name,
-                             CStr      file_name,
-                             size_t    line_number,
-                             void*     user_data)
+void c_error_callback_internal_fn(c_error_t err, CStr function_name,
+                                  CStr file_name, size_t line_number,
+                                  void* user_data)
 {
   (void)user_data;
   char* filename = strrchr(file_name.data, '/') + 1;
-
   fprintf(stderr, "E%d: [%.*s] %s:%zu, %s\n", err, (int)function_name.len,
           function_name.data, filename, line_number, c_error_to_str(err));
 }
 
-void
-__c_error_set(c_error_t err,
-              CStr      function_name,
-              CStr      file_name,
-              size_t    line_number)
+void __c_error_set(c_error_t err, CStr function_name, CStr file_name,
+                   size_t line_number)
 {
-  c_internal_error_callback(err, function_name, file_name, line_number,
+#ifdef _WIN32
+  InterlockedExchange(&c_error, err);
+#else
+  c_error = err;
+#endif
+
+  c_error_callback_internal(err, function_name, file_name, line_number,
                             c_internal_error_user_data);
+}
+
+c_error_t c_error_get(void)
+{
+  return c_error;
 }
 #endif

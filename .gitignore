@@ -3,3 +3,4 @@ build/
 assets/
 .cache/
 html/
+.zed/

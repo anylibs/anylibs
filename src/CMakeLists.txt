@@ -7,10 +7,10 @@ add_library(${PROJECT_NAME}
     str.c
     iter.c
     dl_loader.c
-    # fs.c
+    fs.c
 )
 target_link_libraries(${PROJECT_NAME} anylibs)
-if(ENABLE_ERROR_CALLBACK)
-    message("-- Error callback is ON")
-    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_ERROR_CALLBACK)
+if(ANYLIBS_ENABLE_ERROR_CALLBACK)
+    message("-- error callback is ON")
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ANYLIBS_ENABLE_ERROR_CALLBACK)
 endif()

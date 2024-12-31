@@ -1,20 +1,3 @@
-/**
- * @file allocator.h
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #include "anylibs/allocator.h"
 #include "anylibs/error.h"
 
@@ -30,14 +13,11 @@
 
 #ifdef _WIN32
 #define c_mem_alloc(size, align) _aligned_malloc((size), (align))
-#define c_mem_resize(mem, old_size, new_size, align)                           \
-  _aligned_realloc(mem, new_size, align)
+#define c_mem_resize(mem, old_size, new_size, align) _aligned_realloc(mem, new_size, align)
 #define c_mem_free(mem) _aligned_free(mem)
 #else
 #define c_mem_alloc(size, align) aligned_alloc((align), (size))
-#define c_mem_resize(mem, old_size, new_size, align)                           \
-  c_internal_allocator_default_posix_resize((mem), (old_size), (new_size),     \
-                                            (align))
+#define c_mem_resize(mem, old_size, new_size, align) c_internal_allocator_default_posix_resize((mem), (old_size), (new_size), (align))
 #define c_mem_free(mem) free(mem)
 #endif
 
@@ -46,11 +26,7 @@
 typedef struct CAllocator CAllocator;
 typedef struct CAllocatorVTable {
   void* (*alloc)(CAllocator* self, size_t size, size_t align);
-  void* (*resize)(CAllocator* self,
-                  void*       mem,
-                  size_t      old_size,
-                  size_t      new_size,
-                  size_t      align);
+  void* (*resize)(CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align);
   void (*free)(CAllocator* self, void* mem);
 } CAllocatorVTable;
 
@@ -64,56 +40,37 @@ typedef struct CAllocator {
 } CAllocator;
 
 typedef struct CMemory {
-  size_t size;      ///< the size of @ref CMemory::data
+  size_t size; ///< the size of @ref CMemory::data
   size_t alignment; ///< the alignment of CMemory::data
-  char   data[];    ///< the allocated data
+  char   data[]; ///< the allocated data
 } CMemory;
 
 #ifndef _WIN32
-static void* c_internal_allocator_default_posix_resize(void*  mem,
-                                                       size_t old_size,
-                                                       size_t new_size,
-                                                       size_t align);
+static void* c_internal_allocator_default_posix_resize(void* mem, size_t old_size, size_t new_size, size_t align);
 #endif
 
-#define C_INTERNAL_ALLOCATOR_DEFINE(name)                                      \
-  static void* c_internal_allocator_##name##_alloc(CAllocator* self,           \
-                                                   size_t size, size_t align); \
-  static void* c_internal_allocator_##name##_resize(                           \
-      CAllocator* self, void* mem, size_t old_size, size_t new_size,           \
-      size_t align);                                                           \
-  static void c_internal_allocator_##name##_free(CAllocator* self, void* mem);
-
+#define C_INTERNAL_ALLOCATOR_DEFINE(name)                                                                                         \
+  static void* c_internal_allocator_##name##_alloc(CAllocator* self, size_t size, size_t align);                                  \
+  static void* c_internal_allocator_##name##_resize(CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align); \
+  static void  c_internal_allocator_##name##_free(CAllocator* self, void* mem);
 C_INTERNAL_ALLOCATOR_DEFINE(default)
 C_INTERNAL_ALLOCATOR_DEFINE(arena)
 C_INTERNAL_ALLOCATOR_DEFINE(fixed_buffer)
 
-/// default allocator
+// default allocator
 static CAllocator c_allocator_default__ = {
-    .main_mem = {0},
-    .vtable   = (CAllocatorVTable){.alloc  = c_internal_allocator_default_alloc,
-                                   .resize = c_internal_allocator_default_resize,
-                                   .free   = c_internal_allocator_default_free}};
+    .main_mem      = {0},
+    .vtable.alloc  = c_internal_allocator_default_alloc,
+    .vtable.resize = c_internal_allocator_default_resize,
+    .vtable.free   = c_internal_allocator_default_free};
 
-/// Allocators
-/// @brief get the default allocator (it will use (malloc, free, ...) family)
-/// @note this will never return error, it made like that only for consistency
-/// @return allocator that wraps malloc/free
-CAllocator*
-c_allocator_default(void)
+CAllocator* c_allocator_default(void)
 {
   return &c_allocator_default__;
 }
 
-///--------------------------------- Arena --------------------------------- ///
-
-/// @brief create arena allocator (this is a fixed big memory allocation that
-///        you can use @ref CAllocator::main_mem::buf for smaller allocations
-///        and at the end free the whole arena all at once)
-/// @param capacity
-/// @return arena allocator or NULL on error
-CAllocator*
-c_allocator_arena_create(size_t capacity)
+//--------------------------------- Arena --------------------------------- //
+CAllocator* c_allocator_arena_create(size_t capacity)
 {
   CAllocator* allocator = malloc(sizeof(CAllocator));
   if (!allocator) {
@@ -130,19 +87,14 @@ c_allocator_arena_create(size_t capacity)
 
   allocator->main_mem.capacity     = capacity;
   allocator->main_mem.current_size = 0;
-  allocator->vtable
-      = (CAllocatorVTable){.alloc  = c_internal_allocator_arena_alloc,
-                           .resize = c_internal_allocator_arena_resize,
-                           .free   = c_internal_allocator_arena_free};
+  allocator->vtable                = (CAllocatorVTable){.alloc  = c_internal_allocator_arena_alloc,
+                                                        .resize = c_internal_allocator_arena_resize,
+                                                        .free   = c_internal_allocator_arena_free};
 
   return allocator;
 }
 
-/// @brief destroy the memory hold by the arena
-/// @note this could handle self as NULL
-/// @param self
-void
-c_allocator_arena_destroy(CAllocator* self)
+void c_allocator_arena_destroy(CAllocator* self)
 {
   if (self) {
     free(self->main_mem.buf);
@@ -151,35 +103,26 @@ c_allocator_arena_destroy(CAllocator* self)
   }
 }
 
-///----------------------------- Fixed buffer ----------------------------- ///
-
-/// @brief craete fixed buffer allocator (it is the same like arena, but you
-///        will provide the memory to be used instead of allocating one)
-/// @param buffer this will be used as a big memory like the arena
-/// @param buffer_size the memory capacity
-/// @return fixed buffer allocator or NULL on error
-CAllocator*
-c_allocator_fixed_buffer_create(void* buffer, size_t buffer_size)
+//----------------------------- Fixed buffer ----------------------------- //
+CAllocator* c_allocator_fixed_buffer_create(void* buffer, size_t buffer_size)
 {
   CAllocator* allocator = malloc(sizeof(CAllocator));
-  if (!allocator) return NULL;
+  if (!allocator) {
+    c_error_set(C_ERROR_mem_allocation);
+    return NULL;
+  }
 
   allocator->main_mem.buf          = buffer;
   allocator->main_mem.capacity     = buffer_size;
   allocator->main_mem.current_size = 0;
-  allocator->vtable
-      = (CAllocatorVTable){.alloc  = c_internal_allocator_fixed_buffer_alloc,
-                           .resize = c_internal_allocator_fixed_buffer_resize,
-                           .free   = c_internal_allocator_fixed_buffer_free};
+  allocator->vtable                = (CAllocatorVTable){.alloc  = c_internal_allocator_fixed_buffer_alloc,
+                                                        .resize = c_internal_allocator_fixed_buffer_resize,
+                                                        .free   = c_internal_allocator_fixed_buffer_free};
 
   return allocator;
 }
 
-/// @brief destroy the fixed buffer allocator
-/// @note this could handle self as NULL
-/// @param self
-void
-c_allocator_fixed_buffer_destroy(CAllocator* self)
+void c_allocator_fixed_buffer_destroy(CAllocator* self)
 {
   if (self) {
     *self = (CAllocator){0};
@@ -187,19 +130,7 @@ c_allocator_fixed_buffer_destroy(CAllocator* self)
   }
 }
 
-/// Allocators generic functions
-/// @brief this is like malloc (but is has many other features)
-/// @param self
-/// @param size required size to be allocated
-/// @param alignment check
-///                      https://en.cppreference.com/w/c/memory/aligned_alloc
-/// @param zero_initialized set the allocated memory to zero
-/// @return new allocated memory or NULL on error
-void*
-c_allocator_alloc(CAllocator* self,
-                  size_t      size,
-                  size_t      alignment,
-                  bool        zero_initialized)
+void* c_allocator_alloc(CAllocator* self, size_t size, size_t alignment, bool set_mem_to_zero)
 {
   assert(self);
 
@@ -212,8 +143,7 @@ c_allocator_alloc(CAllocator* self,
     return NULL;
   }
 
-  CMemory* new_memory
-      = self->vtable.alloc(self, size + sizeof(*new_memory), alignment);
+  CMemory* new_memory = self->vtable.alloc(self, size + sizeof(*new_memory), alignment);
   if (!new_memory) {
     c_error_set(C_ERROR_mem_allocation);
     return NULL;
@@ -221,134 +151,96 @@ c_allocator_alloc(CAllocator* self,
 
   new_memory->size      = size;
   new_memory->alignment = alignment;
-  if (zero_initialized) memset(new_memory->data, 0, size);
+  if (set_mem_to_zero) memset(new_memory->data, 0, size);
 
   return new_memory->data;
 }
 
-/// @brief this is like realloc
-/// @note Default Allocator will ALWAYS create new memory on resize to keep the
-///       alignment
-/// @param self
-/// @param memory the input memory that need to be resized, also the
-///                       resulted new memory will be returned here
-/// @param new_size
-/// @return is_ok[true]: return new reallocated memory with the new size
-///         is_ok[false]: failed to resize, and return the old @p memory
-CResultVoidPtr
-c_allocator_resize(CAllocator* self, void* memory, size_t new_size)
+void* c_allocator_resize(CAllocator* self, void* memory, size_t new_size)
 {
   assert(self);
 
-  CResultVoidPtr result = {.vp = memory};
-
-  if (!memory) return result;
+  if (!memory) {
+    c_error_set(C_ERROR_null_ptr);
+    return NULL;
+  }
   if (new_size == 0) {
     c_allocator_free(self, memory);
-    result.is_ok = true;
-    return result;
+    return memory;
   }
 
   CMemory* old_mem = TO_CMEMORY(memory);
-
-  CMemory* new_mem
-      = self->vtable.resize(self, old_mem, old_mem->size + sizeof(*old_mem),
-                            new_size + sizeof(*old_mem), old_mem->alignment);
+  CMemory* new_mem = self->vtable.resize(self, old_mem, old_mem->size + sizeof(*old_mem), new_size + sizeof(*old_mem), old_mem->alignment);
   if (!new_mem) {
     c_error_set(C_ERROR_mem_allocation);
-    return result;
+    return NULL;
   }
 
   new_mem->size = new_size;
 
-  result.vp    = new_mem->data;
-  result.is_ok = true;
-  return result;
+  return new_mem->data;
 }
 
-/// @brief free an allocated memory
-/// @note this could handle @p memory as NULL
-/// @param self
-/// @param memory
-void
-c_allocator_free(CAllocator* self, void* memory)
+void c_allocator_free(CAllocator* self, void* memory)
 {
   assert(self);
-
-  if (!memory) return;
-
-  self->vtable.free(self, TO_CMEMORY(memory));
+  if (memory) self->vtable.free(self, TO_CMEMORY(memory));
 }
 
-size_t
-c_allocator_mem_size(void* memory)
+size_t c_allocator_mem_size(void* memory)
 {
-  assert(memory);
   return TO_CMEMORY(memory)->size;
 }
 
-size_t
-c_allocator_mem_alignment(void* memory)
+size_t c_allocator_mem_alignment(void* memory)
 {
-  assert(memory);
   return TO_CMEMORY(memory)->alignment;
 }
 
-/******************************************************************************/
-/********************************** Internal **********************************/
-/******************************************************************************/
+// ----------------------------------- internal
+// ----------------------------------- //
 
 #ifndef _WIN32
-void*
-c_internal_allocator_default_posix_resize(void*  mem,
-                                          size_t old_size,
-                                          size_t new_size,
-                                          size_t align)
+void* c_internal_allocator_default_posix_resize(void* mem, size_t old_size, size_t new_size, size_t align)
 {
   if (new_size <= old_size) return mem;
 
   void* new_mem = c_mem_alloc(new_size, align);
-  if (new_mem) {
-    memcpy(new_mem, mem, old_size);
-    c_mem_free(mem);
-  }
+  if (!new_mem) return NULL;
 
+  memcpy(new_mem, mem, old_size);
+  c_mem_free(mem);
   return new_mem;
 }
 #endif
 
-void*
-c_internal_allocator_default_alloc(CAllocator* self, size_t size, size_t align)
+void* c_internal_allocator_default_alloc(CAllocator* self, size_t size, size_t align)
 {
   (void)self;
   return c_mem_alloc(size, align);
 }
 
-void*
-c_internal_allocator_default_resize(
-    CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
+void* c_internal_allocator_default_resize(CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
 {
   (void)self;
   void* resized_mem = c_mem_resize(mem, old_size, new_size, align);
-  return resized_mem ? resized_mem : mem;
+  return resized_mem ? resized_mem : NULL;
 }
 
-void
-c_internal_allocator_default_free(CAllocator* self, void* mem)
+void c_internal_allocator_default_free(CAllocator* self, void* mem)
 {
   (void)self;
   c_mem_free(mem);
 }
 
-void*
-c_internal_allocator_arena_alloc(CAllocator* self, size_t size, size_t align)
+void* c_internal_allocator_arena_alloc(CAllocator* self, size_t size, size_t align)
 {
   // get aligned address first
   size_t new_data_index = self->main_mem.current_size;
-  while (
-      (new_data_index < self->main_mem.capacity)
-      && ((intptr_t)((char*)self->main_mem.buf + new_data_index) % align != 0))
+  while ((new_data_index < self->main_mem.capacity) &&
+         ((intptr_t)((char*)self->main_mem.buf + new_data_index) % align != 0)) {
     new_data_index++;
+  }
 
   if ((self->main_mem.capacity - (new_data_index - size)) < size) {
     c_error_set(C_ERROR_mem_allocation);
@@ -359,15 +251,11 @@ c_internal_allocator_arena_alloc(CAllocator* self, size_t size, size_t align)
   return &((char*)self->main_mem.buf)[self->main_mem.current_size - size];
 }
 
-void*
-c_internal_allocator_arena_resize(
-    CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
+void* c_internal_allocator_arena_resize(CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
 {
   // this is the last allocated block
-  if ((char*)self->main_mem.buf + self->main_mem.current_size - old_size
-      == mem) {
-    self->main_mem.current_size
-        = (self->main_mem.current_size - old_size) + new_size;
+  if ((char*)self->main_mem.buf + self->main_mem.current_size - old_size == mem) {
+    self->main_mem.current_size = (self->main_mem.current_size - old_size) + new_size;
     return mem;
   }
 
@@ -376,36 +264,31 @@ c_internal_allocator_arena_resize(
     c_error_set(C_ERROR_mem_allocation);
     return NULL;
   }
-  memcpy(new_mem, mem, old_size);
 
+  memcpy(new_mem, mem, old_size);
   return new_mem;
 }
 
-void
-c_internal_allocator_arena_free(CAllocator* self, void* mem)
+void c_internal_allocator_arena_free(CAllocator* self, void* mem)
 {
-  (void)self->main_mem;
-  (void)mem;
+  // remove it if this is the last one
+  if ((size_t)((uint8_t*)mem - (uint8_t*)self->main_mem.buf) ==
+      self->main_mem.current_size - ((CMemory*)(mem))->size) {
+    self->main_mem.current_size -= TO_CMEMORY(mem)->size;
+  }
 }
 
-void*
-c_internal_allocator_fixed_buffer_alloc(CAllocator* self,
-                                        size_t      size,
-                                        size_t      align)
+void* c_internal_allocator_fixed_buffer_alloc(CAllocator* self, size_t size, size_t align)
 {
   return c_internal_allocator_arena_alloc(self, size, align);
 }
 
-void*
-c_internal_allocator_fixed_buffer_resize(
-    CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
+void* c_internal_allocator_fixed_buffer_resize(CAllocator* self, void* mem, size_t old_size, size_t new_size, size_t align)
 {
-  return c_internal_allocator_arena_resize(self, mem, old_size, new_size,
-                                           align);
+  return c_internal_allocator_arena_resize(self, mem, old_size, new_size, align);
 }
 
-void
-c_internal_allocator_fixed_buffer_free(CAllocator* self, void* mem)
+void c_internal_allocator_fixed_buffer_free(CAllocator* self, void* mem)
 {
   c_internal_allocator_arena_free(self, mem);
 }

@@ -1,179 +1,79 @@
-/**
- * @file iter.h
- * @author Mohamed A. Elmeligy
- * @date 2024-2025
- * @copyright MIT License
- *
- * Permission is hereby granted, free of charge, to use, copy, modify, and
- * distribute this software, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY OR FITNESS FOR
- * A PARTICULAR PURPOSE. See the License for details.
- */
-
 #include "anylibs/iter.h"
 #include "anylibs/error.h"
 
-#include <assert.h>
+#include <stdint.h>
 
-/// @brief create an iterator
-/// @param step_size this is usually the type size
-/// @param step_callback
-/// @return new object of CIter
-CIter
-c_iter(size_t step_size, CIterStepCallback step_callback)
+CIter c_iter(void* data, size_t data_size, size_t step_size)
 {
   CIter iter = {
-      .counter     = 0,
-      .is_reversed = false,
-      .step_size   = step_size,
-      .is_done     = false,
-      .step_callback
-      = step_callback ? step_callback : c_iter_default_step_callback,
+      .data      = data,
+      .data_size = data_size,
+      .step_size = step_size,
   };
 
   return iter;
 }
 
-/// @brief this is the default step callback for @ref c_iter if @p
-///        step_callback was NULL.
-///        this public for custom step function (filter like) that could also
-///        use this default step function
-/// @param self
-/// @param data
-/// @param data_len
-/// @return element
-/// @return the state of the step, is_ok: false here means could not continue
-///         stepping, true: return the next element
-CResultVoidPtr
-c_iter_default_step_callback(CIter* self, void* data, size_t data_len)
+bool c_iter_next(CIter* self, void** out_data)
 {
-  assert(self);
-
-  CResultVoidPtr result            = {0};
-  size_t         pos_inc_direction = 1;
-
-  if (self->is_reversed) {
-    if (self->is_done) return result;
-
-    if (!self->counter) self->is_done = true;
-    pos_inc_direction = -1;
+  if (!self->ptr) {
+    self->ptr = self->data;
   } else {
-    if (self->counter >= data_len) return result;
-
-    self->is_done = false;
+    self->ptr = (uint8_t*)self->ptr + self->step_size;
+    if ((uint8_t*)self->ptr >= (uint8_t*)self->data + self->data_size) return false;
   }
 
-  result.vp    = (uint8_t*)data + (self->counter * self->step_size);
-  result.is_ok = true;
-  self->counter += pos_inc_direction;
-
-  return result;
+  if (out_data) *out_data = self->ptr;
+  return true;
 }
 
-/// @brief reverse the direction starting from the last element
-/// @param self
-/// @param data
-/// @param data_len
-void
-c_iter_rev(CIter* self, void* data, size_t data_len)
+bool c_iter_prev(CIter* self, void** out_data)
 {
-  assert(self);
-  (void)data;
+  if (!self->ptr) {
+    self->ptr = (uint8_t*)self->data + self->data_size - self->step_size;
+  } else {
+    self->ptr = (uint8_t*)self->ptr - self->step_size;
+    if ((uint8_t*)self->ptr < (uint8_t*)self->data) return false;
+  }
 
-  self->is_reversed = true;
-  self->counter     = data_len - 1;
+  if (out_data) *out_data = self->ptr;
+  return true;
 }
 
-/// @brief get the next element
-/// @param self
-/// @param data
-/// @param data_len
-/// @return element pointer to the next element
-/// @return the state of the step, is_ok: false here means could not continue
-///         stepping, true: return the next element
-CResultVoidPtr
-c_iter_next(CIter* self, void* data, size_t data_len)
+bool c_iter_nth(CIter* self, size_t index, void** out_data)
 {
-  assert(self);
-
-  CResultVoidPtr result = self->step_callback(self, data, data_len);
-  return result;
-}
-
-/// @brief move the iterator to the nth element and return its element
-/// @param self
-/// @param index
-/// @param data
-/// @param data_len
-/// @return is_ok: true -> nth element, false -> not found (or error happened)
-CResultVoidPtr
-c_iter_nth(CIter* self, size_t index, void* data, size_t data_len)
-{
-  assert(self);
-
-  CResultVoidPtr result = {0};
-  if (index >= data_len) {
+  if (index >= self->data_size / self->step_size) {
     c_error_set(C_ERROR_invalid_index);
-    return result;
+    return false;
   }
 
-  while ((result = c_iter_next(self, data, data_len)).is_ok) {
-    if (self->counter - 1 == index) {
-      result.vp    = (uint8_t*)data + (index * self->step_size);
-      result.is_ok = true;
-      break;
-    }
-  }
-
-  return result;
+  self->ptr = (uint8_t*)self->data + (index * self->step_size);
+  if (out_data) *out_data = self->ptr;
+  return true;
 }
 
-/// @brief get the current data without changing the iterator
-/// @param self
-/// @param data
-/// @param data_len
-/// @return is_ok: true -> peek next element, false -> not found (or error
-///         happened)
-CResultVoidPtr
-c_iter_peek(CIter const* self, void* data, size_t data_len)
+bool c_iter_peek(CIter const* self, void** out_data)
 {
-  assert(self);
+  CIter tmp = *self;
 
-  CIter          tmp    = *self;
-  CResultVoidPtr result = c_iter_next(&tmp, data, data_len);
-
-  return result;
+  bool status = c_iter_next(&tmp, out_data);
+  return status;
 }
 
-/// @brief move the iterator to the first element and return its element
-/// @param self
-/// @param data
-/// @param data_len
-/// @return is_ok: true -> first element, false -> not found (or error happened)
-CResultVoidPtr
-c_iter_first(CIter* self, void* data, size_t data_len)
+void* c_iter_first(CIter* self)
 {
-  assert(self);
+  self->ptr = NULL;
 
-  CResultVoidPtr result = c_iter_nth(self, 0, data, data_len);
-  return result;
+  void* out_data;
+  c_iter_next(self, &out_data);
+  return out_data;
 }
 
-/// @brief move the iterator to the last element and return its element
-/// @param self
-/// @param data
-/// @param data_len
-/// @return is_ok: true -> last element, false -> not found (or error happened)
-CResultVoidPtr
-c_iter_last(CIter* self, void* data, size_t data_len)
+void* c_iter_last(CIter* self)
 {
-  assert(self);
+  self->ptr = NULL;
 
-  CResultVoidPtr result = c_iter_nth(self, data_len - 1, data, data_len);
-  return result;
+  void* out_data;
+  c_iter_prev(self, &out_data);
+  return out_data;
 }
