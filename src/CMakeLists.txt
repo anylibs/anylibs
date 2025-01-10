@@ -8,6 +8,7 @@ add_library(${PROJECT_NAME}
     iter.c
     dl_loader.c
     fs.c
+    map.c
 )
 target_link_libraries(${PROJECT_NAME} anylibs)
 if(ANYLIBS_ENABLE_ERROR_CALLBACK)

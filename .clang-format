@@ -5,7 +5,15 @@ PointerAlignment: Left
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: AcrossComments
 AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortBlocksOnASingleLine: Always
 AllowShortFunctionsOnASingleLine: None
 AlignTrailingComments: false
+AllowShortEnumsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+IndentCaseLabels: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: false
 ColumnLimit: 0

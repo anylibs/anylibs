@@ -13,4 +13,5 @@ create_test(iter anylibs_src)
 create_test(defer anylibs_src)
 create_test(dl_loader anylibs_src)
 create_test(fs anylibs_src)
+create_test(map anylibs_src)
 
