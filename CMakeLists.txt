@@ -26,19 +26,27 @@ if (MSVC)
         /guard:cf # control flow guard
     )
 else()
+    if(WIN32)
+        set(sanitizers address,undefined)
+    else()
+        set(sanitizers address,undefined,leak)
+    endif()
+
     add_compile_options(
         -Wall
         -Wextra
         -Wpedantic
         -Werror
         $<$<CONFIG:RELEASE>:-D_FORTIFY_SOURCE=2>
-        $<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>
+        # $<$<CONFIG:DEBUG>:-fsanitize=${sanitizers}>
         $<$<CONFIG:DEBUG>:-fstack-protector-strong>
         $<$<CONFIG:DEBUG>:--param=ssp-buffer-size=4>
         $<$<CONFIG:DEBUG>:-fno-omit-frame-pointer>
         $<$<AND:$<CONFIG:DEBUG>,$<PLATFORM_ID:Linux>>:-fstack-clash-protection>
     )
-    add_link_options($<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>)
+    # add_link_options(
+    #     $<$<CONFIG:DEBUG>:-fsanitize=${sanitizers}>
+    # )
 endif()
 
 if (ANYLIBS_ENABLE_TESTING)

@@ -50,7 +50,7 @@ void *c_dl_loader_load(CDLLoader *self, CStr symbol_name) {
   }
 
 #ifdef _WIN32
-  void *result = GetProcAddress(self, symbol_name.data);
+  void *result = (void*)GetProcAddress((HMODULE)self, symbol_name.data);
 #else
   void *result = dlsym(self, symbol_name.data);
 #endif
@@ -65,7 +65,7 @@ bool c_dl_loader_destroy(CDLLoader *self) {
 
   if (self) {
 #ifdef _WIN32
-    close_status = (bool)FreeLibrary(self);
+    close_status = (bool)FreeLibrary((HMODULE)self);
 #else
     close_status = dlclose(self) == 0;
 #endif

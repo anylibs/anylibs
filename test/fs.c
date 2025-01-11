@@ -26,11 +26,6 @@ UTEST(CFsIter, iter)
       EXPECT_TRUE_MSG(c_fs_file_size(f, &f_size),
                       c_error_to_str(c_error_get()));
     }
-
-    // printf("%s:%zuKB: %s\n",
-    //        c_fs_is_dir(result) ? "D" : "F",
-    //        f_size / 1024,
-    //        path->data);
   }
   EXPECT_TRUE(has_at_least_one_file);
 

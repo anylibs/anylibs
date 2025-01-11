@@ -86,7 +86,7 @@ static void c_error_callback_internal_fn(c_error_t err, CStr function_name,
                                          void* user_data);
 
 #ifdef _WIN32
-#include <Winnt.h>
+#include <Windows.h>
 static bool      c_error_initiated = false;
 static c_error_t c_error           = C_ERROR_none;
 #else
@@ -100,7 +100,7 @@ void c_error_register_once(CErrorCallback callback, void* user_data)
 {
 
 #ifdef _WIN32
-  bool old_state = InterlockedCompareExchange(&c_error_initiated, true, false);
+  bool old_state = InterlockedCompareExchange((volatile long *)&c_error_initiated, true, false);
   if (old_state)
     return;
 #else
@@ -129,7 +129,7 @@ void __c_error_set(c_error_t err, CStr function_name, CStr file_name,
                    size_t line_number)
 {
 #ifdef _WIN32
-  InterlockedExchange(&c_error, err);
+  InterlockedExchange((volatile long *)&c_error, err);
 #else
   c_error = err;
 #endif

@@ -13,7 +13,7 @@
 
 #ifdef _WIN32
 #define c_mem_alloc(size, align) _aligned_malloc((size), (align))
-#define c_mem_resize(mem, old_size, new_size, align) _aligned_realloc(mem, new_size, align)
+#define c_mem_resize(mem, old_size, new_size, align) ((void)(old_size), _aligned_realloc(mem, new_size, align))
 #define c_mem_free(mem) _aligned_free(mem)
 #else
 #define c_mem_alloc(size, align) aligned_alloc((align), (size))
