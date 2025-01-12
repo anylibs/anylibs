@@ -32,4 +32,18 @@
 #endif
 #endif
 
+/// ---------------------------------------------------------------------------
+/// mark a parameter as non-null as rust for GCC, Clang and MSVC
+/// note: this will check only if explicit NULL passed to a parameter
+/// ---------------------------------------------------------------------------
+
+#if defined(_MSC_VER) // Microsoft Visual Studio
+#include <sal.h>
+#define ANYLIBS_NONNULL _Nonnull
+#elif defined(__GNUC__) || defined(__clang__) // GCC or Clang
+#define ANYLIBS_NONNULL __attribute__((nonnull))
+#else // Fallback for other compilers
+#define ANYLIBS_NONNULL
+#endif
+
 #endif // ANYLIBS_DEF_H

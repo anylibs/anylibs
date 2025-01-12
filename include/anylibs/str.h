@@ -9,19 +9,18 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/// this is like std::string
+/// @brief this is like std::string
 typedef struct CStrBuf {
   char* data;
 } CStrBuf;
 
-/// this is like std::string_view
+/// @brief this is like std::string_view
 typedef struct CStr {
   char*  data;
   size_t len; ///< in bytes
 } CStr;
+#define CSTR(str) ((CStr){(char*)(str), sizeof(str) - 1}) ///< create CStr object from char* string
 
-/// @brief create CStr object from char* string
-#define CSTR(str) ((CStr){(char*)(str), sizeof(str) - 1})
 typedef struct CChar {
   char   data[4]; ///< this is maximum size of a valid UTF-8 character
   size_t count;
@@ -43,7 +42,7 @@ bool     c_str_set_capacity(CStrBuf* self, size_t new_capacity);
 bool     c_str_shrink_to_fit(CStrBuf* self);
 bool     c_str_get(CStrBuf const* self, size_t start_index, size_t range_size, CStr* out_str);
 bool     c_str_find(CStrBuf const* self, CStr data, CStr* out_str);
-bool     c_str_find_by_iter(CStrBuf const* self, CStr data, CIter* iter, CStr* out_str);
+bool     c_str_find_by_iter(CIter* iter, CStr data, CStr* out_str);
 int      c_str_starts_with(CStrBuf const* self, CStr cstr);
 int      c_str_ends_with(CStrBuf const* self, CStr cstr);
 bool     c_str_push(CStrBuf* self, CStr cstr);

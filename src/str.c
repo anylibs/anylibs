@@ -287,7 +287,7 @@ bool c_str_get(CStrBuf const* self, size_t start_index, size_t range_size,
 bool c_str_find(CStrBuf const* self, CStr data, CStr* out_str)
 {
   CIter iter   = c_str_iter((CStrBuf*)self);
-  bool  status = c_str_find_by_iter(self, data, &iter, out_str);
+  bool  status = c_str_find_by_iter(&iter, data, out_str);
 
   return status;
 }
@@ -300,11 +300,8 @@ bool c_str_find(CStrBuf const* self, CStr data, CStr* out_str)
 /// @param iter
 /// @return is_ok[true]: return @ref CStr that has a pointer to character at @p
 ///         start_index, is_ok[false]: not found (or error happened)
-bool c_str_find_by_iter(CStrBuf const* self, CStr data, CIter* iter,
-                        CStr* out_str)
+bool c_str_find_by_iter(CIter* iter, CStr data, CStr* out_str)
 {
-  assert(self);
-
   if (!out_str) {
     c_error_set(C_ERROR_null_ptr);
     return false;

@@ -9,8 +9,8 @@ typedef struct CMap {
   void*  buckets; // { [CMapBucket, key, value], ... }
   void*  spare_bucket1; // { [CMapBucket, key, value] }
   void*  spare_bucket2; // { [CMapBucket, key, value] }
-  size_t capacity;
-  size_t len;
+  size_t capacity; ///< in units
+  size_t len; ///< in units
   struct {
     size_t orig;
     size_t aligned;
