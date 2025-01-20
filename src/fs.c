@@ -82,8 +82,8 @@ CFile* c_fs_file_open(CPath path, char const mode[], size_t mode_size)
 
 #if defined(_WIN32)
   char mode_[MAX_FINAL_MODE_LEN] = {0};
-  memcpy(mode_, mode.data, MAX_MODE_LEN);
-  memcpy(mode_ + mode.len, "b, ccs=UTF-8", MAX_FINAL_MODE_LEN - MAX_MODE_LEN);
+  memcpy(mode_, mode, MAX_MODE_LEN);
+  memcpy(mode_ + mode_size, "b, ccs=UTF-8", MAX_FINAL_MODE_LEN - MAX_MODE_LEN);
 
   SetLastError(0);
   FILE* f = fopen(path.data, mode_);
@@ -229,8 +229,8 @@ int c_fs_path_to_absolute(CPath path, CPathBuf* in_out_abs_path)
 /// calculate the required capacity
 #ifdef _WIN32
   SetLastError(0);
-  DWORD abs_path_len = GetFullPathName(path.data, in_out_abs_path->data, in_out_abs_path->capacity, NULL);
-  if (required_len == 0) {
+  DWORD abs_path_len = GetFullPathName(path.data, in_out_abs_path->capacity, in_out_abs_path->data, NULL);
+  if (abs_path_len == 0) {
     c_error_set((c_error_t)GetLastError());
     return -1;
   } else {
@@ -266,7 +266,7 @@ int c_fs_path_is_absolute(CPath path)
   c_fs_path_validate(path.data, path.size);
 
 #ifdef _WIN32
-  return PathIsRelativeA(path.data) ? 0 : 1;
+  return PathIsRelativeA(path.data) ? 1 : 0;
 #else
   return path.data[0] == C_FS_PATH_SEP[0] ? 0 : 1;
 #endif
@@ -664,13 +664,19 @@ int c_fs_dir_is_empty(CPath path)
   int result = 0;
 
 #ifdef _WIN32
+  char pbuf[c_fs_path_max_len()];
+  memcpy(pbuf, path.data, path.size);
+  snprintf(pbuf, c_fs_path_max_len(), "%.*s" C_FS_PATH_SEP "*", (int)path.size, path.data);
+
   SetLastError(0);
   WIN32_FIND_DATAA cur_file;
-  HANDLE           find_handler = FindFirstFileA(path.data, &cur_file);
+  HANDLE           find_handler = FindFirstFileA(pbuf, &cur_file);
+
   do {
     if (find_handler == INVALID_HANDLE_VALUE) {
       c_error_set((c_error_t)GetLastError());
-      return -1;
+      result = -1;
+      break;
     }
 
     // skip '.' and '..'
@@ -721,7 +727,7 @@ int c_fs_exists(CPath const path)
   DWORD stat_status = GetFileAttributesA(path.data);
   if (stat_status == INVALID_FILE_ATTRIBUTES) {
     DWORD last_error = GetLastError();
-    if (last_error == ERROR_PATH_NOT_FOUND) {
+    if (last_error == ERROR_FILE_NOT_FOUND || last_error == ERROR_PATH_NOT_FOUND) {
       return 1;
     } else {
       c_error_set(last_error);
@@ -748,24 +754,34 @@ int c_fs_exists(CPath const path)
 
 int c_fs_delete(CPath path)
 {
-  c_fs_path_validate(path.data, path.size);
-
 #if defined(_WIN32)
-  BOOL remove_dir_status = RemoveDirectoryA(path.data);
-  if (!remove_dir_status) {
-    c_error_set((c_error_t)GetLastError());
-    return -1;
-  }
+  if (c_fs_is_dir(path) == 0) {
+    BOOL remove_dir_status = RemoveDirectoryA(path.data);
+    if (!remove_dir_status) {
+      c_error_set((c_error_t)GetLastError());
+      return -1;
+    }
+  } else {
+    c_fs_path_validate(path.data, path.size);
 
-  return 0;
-#endif
+    _doserrno         = 0;
+    int remove_status = remove(path.data);
+    if (remove_status) {
+      c_error_set(_doserrno);
+      return -1;
+    }
+  }
+#else
+
+  c_fs_path_validate(path.data, path.size);
 
   errno             = 0;
   int remove_status = remove(path.data);
   if (remove_status) {
-    c_error_set((c_error_t)errno);
+    c_error_set(errno);
     return -1;
   }
+#endif
 
   return 0;
 }

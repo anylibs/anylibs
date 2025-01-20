@@ -15,6 +15,13 @@ project(anylibs LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(WIN32)
+    set(_WIN32_WINNT 0x0A00 CACHE STRING "Windows 10 version 1607 or higher")
+
+    if(_WIN32_WINNT LESS 0x0A00)
+        message(FATAL_ERROR "Anylibs support Windows 10 version 1607 or above only.")
+    endif()
+endif()
 if (MSVC)
     add_compile_options(
         /W4 # warning level 4

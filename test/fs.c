@@ -56,9 +56,10 @@ UTEST(CFile, file)
     ASSERT_TRUE(f);
 
     enum { buf_size = 100 };
-    char buf[buf_size];
-    EXPECT_TRUE(c_fs_file_read(f, buf, buf_size, sizeof(char)));
-    EXPECT_STREQ("Om Kulthuom\n", buf);
+    char   buf[buf_size];
+    size_t read_size = c_fs_file_read(f, buf, buf_size, sizeof(char));
+    EXPECT_TRUE(read_size > 0);
+    EXPECT_STRNEQ("Om Kulthuom\n", buf, read_size);
 
     size_t f_size;
     EXPECT_TRUE(c_fs_file_size(f, &f_size) == 0);
@@ -89,7 +90,7 @@ UTEST(CPath, general)
 
   size_t pathbuf_cur_size = pathbuf.size;
   EXPECT_TRUE(c_fs_path_append(&pathbuf, CPATH("folder/file")) == 0);
-  EXPECT_STREQ("/folder/file", pathbuf.data + pathbuf_cur_size); // ends_with ?
+  EXPECT_STREQ("folder/file", pathbuf.data + pathbuf_cur_size + 1); // ends_with ?
 }
 
 UTEST(CPath, filename)
@@ -178,8 +179,11 @@ UTEST(CDir, current_dir)
   EXPECT_TRUE(pathbuf.size > 0);
   EXPECT_TRUE(c_fs_is_dir(c_fs_path_create(pathbuf.data, pathbuf.size)) == 0);
 
+  size_t old_path_size = pathbuf.size;
   EXPECT_TRUE(c_fs_path_append(&pathbuf, CPATH("..")) == 0);
   EXPECT_TRUE(c_fs_dir_change_current(c_fs_path_create(pathbuf.data, pathbuf.size)) == 0);
+  pathbuf.data[old_path_size] = '\0';
+  EXPECT_TRUE(c_fs_dir_change_current(c_fs_path_create(pathbuf.data, old_path_size)) == 0);
 }
 
 UTEST(CDir, current_exe_dir)
