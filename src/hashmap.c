@@ -389,9 +389,10 @@ bool c_internal_map_resize(CHashMap* self, size_t new_capacity)
 
       if (new_map_bucket->distance_from_initial_bucket < bucket->distance_from_initial_bucket) {
         // swap
-        memcpy(self->spare_bucket2, bucket, self->bucket_size);
+        CHashMapBucket* tmp = (CHashMapBucket*)(self->spare_bucket2);
+        memcpy(tmp, bucket, self->bucket_size);
         memcpy(bucket, new_map_bucket, self->bucket_size);
-        memcpy(new_map_bucket, self->spare_bucket2, self->bucket_size);
+        memcpy(new_map_bucket, tmp, self->bucket_size);
       }
 
       bucket->distance_from_initial_bucket += 1;

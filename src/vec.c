@@ -30,8 +30,7 @@ CVec* c_vec_create(size_t element_size, CAllocator* allocator)
   return c_vec_create_with_capacity(element_size, 1U, false, allocator);
 }
 
-CVec* c_vec_create_with_capacity(size_t element_size, size_t capacity,
-                                 bool set_mem_to_zero, CAllocator* allocator)
+CVec* c_vec_create_with_capacity(size_t element_size, size_t capacity, bool set_mem_to_zero, CAllocator* allocator)
 {
   assert(element_size > 0);
 

@@ -1,14 +1,10 @@
 #include "anylibs/fs.h"
 #include "anylibs/allocator.h"
 #include "anylibs/error.h"
-#include "anylibs/str.h"
 
 #include <assert.h>
 #include <errno.h>
-#include <limits.h>
-#include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,29 +41,36 @@
   do {                                              \
     if (!(path) || (path_len) == 0) {               \
       c_error_set(C_ERROR_fs_invalid_path);         \
-      return false;                                 \
+      return -1;                                    \
     }                                               \
     if ((path)[(path_len)] != '\0') {               \
       c_error_set(C_ERROR_none_terminated_raw_str); \
-      return false;                                 \
+      return -1;                                    \
     }                                               \
   } while (0)
 
-CFile* c_fs_file_open(CStr path, CStr mode)
+CFile* c_fs_file_open(CPath path, char const mode[], size_t mode_size)
 {
   /// validation
-  c_fs_path_validate(path.data, path.len);
-  if (!mode.data || mode.len == 0) {
+  if (!(path.data) || (path.size) == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return NULL;
+  }
+  if ((path.data)[path.size] != '\0') {
+    c_error_set(C_ERROR_none_terminated_raw_str);
+    return NULL;
+  }
+  if (!mode || mode_size == 0) {
     c_error_set(C_ERROR_fs_invalid_open_mode);
     return NULL;
   }
-  if (mode.data[mode.len] != '\0') {
+  if (mode[mode_size] != '\0') {
     c_error_set(C_ERROR_none_terminated_raw_str);
     return NULL;
   }
   enum { MAX_MODE_LEN       = 3,
          MAX_FINAL_MODE_LEN = 15 };
-  if (mode.len > MAX_MODE_LEN) {
+  if (mode_size > MAX_MODE_LEN) {
     c_error_set(C_ERROR_fs_invalid_open_mode);
     return NULL;
   }
@@ -90,7 +93,7 @@ CFile* c_fs_file_open(CStr path, CStr mode)
   }
 #else
   errno   = 0;
-  FILE* f = fopen(path.data, mode.data);
+  FILE* f = fopen(path.data, mode);
   if (!f) {
     c_error_set(errno);
     return NULL;
@@ -100,13 +103,13 @@ CFile* c_fs_file_open(CStr path, CStr mode)
   return (CFile*)f;
 }
 
-bool c_fs_file_size(CFile* self, size_t* out_file_size)
+int c_fs_file_size(CFile* self, size_t* out_file_size)
 {
   assert(self);
 
   if (!out_file_size) {
     c_error_set(C_ERROR_null_ptr);
-    return false;
+    return -1;
   }
 
   clearerr((FILE*)self);
@@ -114,7 +117,7 @@ bool c_fs_file_size(CFile* self, size_t* out_file_size)
   int fseek_state = fseek((FILE*)self, 0, SEEK_END);
   if (fseek_state != 0) {
     c_error_set(ferror((FILE*)self));
-    return false;
+    return -1;
   }
 
   *out_file_size = ftell((FILE*)self);
@@ -122,55 +125,45 @@ bool c_fs_file_size(CFile* self, size_t* out_file_size)
   fseek_state    = fseek((FILE*)self, 0, SEEK_SET); /* same as rewind(f); */
   if (fseek_state != 0) {
     c_error_set(ferror((FILE*)self));
-    return false;
+    return -1;
   }
 
-  return true;
+  return 0;
 }
 
-bool c_fs_file_read(CFile* self, CStrBuf* buf, size_t* out_read_size)
+size_t c_fs_file_read(CFile* self, char buf[], size_t elements_count, size_t element_size)
 {
   assert(self);
   assert(buf);
 
-  // if (!out_read_size) {
-  //   c_error_set(C_ERROR_null_ptr);
-  //   return false;
-  // }
-
   clearerr((FILE*)self);
-  size_t read_size = fread(buf->data, sizeof(*buf->data),
-                           c_str_capacity(buf) - 1, (FILE*)self);
+  size_t read_size = fread(buf, element_size, elements_count, (FILE*)self);
 
-  if (out_read_size)
-    *out_read_size = read_size;
   if (read_size > 0) {
-    c_str_set_len(buf, read_size);
-    return true;
+    return read_size;
   } else {
     c_error_set(ferror((FILE*)self));
-    return false;
+    return 0;
   }
 }
 
-bool c_fs_file_write(CFile* self, CStr buf, size_t* out_write_size)
+size_t c_fs_file_write(CFile* self, char buf[], size_t elements_count, size_t element_size)
 {
   assert(self);
+  assert(buf);
 
   clearerr((FILE*)self);
-  size_t write_size = fwrite(buf.data, sizeof(*buf.data), buf.len, (FILE*)self);
+  size_t write_size = fwrite(buf, element_size, elements_count, (FILE*)self);
 
-  if (out_write_size)
-    *out_write_size = write_size;
   if (write_size > 0) {
-    return true;
+    return write_size;
   } else {
     c_error_set(ferror((FILE*)self));
-    return false;
+    return 0;
   }
 }
 
-bool c_fs_file_flush(CFile* self)
+int c_fs_file_flush(CFile* self)
 {
   assert(self);
 
@@ -178,13 +171,13 @@ bool c_fs_file_flush(CFile* self)
   int status = fflush((FILE*)self);
   if (status) {
     c_error_set(errno);
-    return false;
+    return -1;
   }
 
-  return true;
+  return 0;
 }
 
-bool c_fs_file_close(CFile* self)
+int c_fs_file_close(CFile* self)
 {
   if (self) {
     clearerr((FILE*)self);
@@ -193,85 +186,98 @@ bool c_fs_file_close(CFile* self)
 
     if (close_state != 0) {
       c_error_set(errno);
-      return false;
+      return -1;
     }
   }
 
-  return true;
+  return 0;
 }
 
-bool c_fs_path_append(CStrBuf* base_path, CStr path)
+int c_fs_path_append(CPathBuf* base_path, CPath path)
 {
   assert(base_path);
 
-  if (!base_path->data || c_str_len(base_path) == 0 || !path.data || path.len == 0) {
+  if (!base_path->data || base_path->size == 0 || !path.data || path.size == 0) {
     c_error_set(C_ERROR_fs_invalid_path);
-    return false;
+    return -1;
+  }
+  if (((base_path->capacity - base_path->size) < path.size + 1)) {
+    c_error_set(C_ERROR_invalid_capacity);
+    return -1;
   }
 
-  bool status = c_str_push(base_path, CSTR((char[]){C_FS_PATH_SEP}));
-  if (!status)
-    return status;
+  base_path->data[base_path->size++] = C_FS_PATH_SEP[0];
+  memcpy(base_path->data + base_path->size, path.data, path.size);
+  base_path->size += path.size;
+  base_path->data[base_path->size] = '\0';
 
-  status = c_str_push(base_path, path);
-  if (!status)
-    return status;
-
-  return true;
+  return 0;
 }
 
-CStrBuf* c_fs_path_to_absolute(CStr path, CAllocator* allocator)
+int c_fs_path_to_absolute(CPath path, CPathBuf* in_out_abs_path)
 {
-  c_fs_path_validate(path.data, path.len);
+  c_fs_path_validate(path.data, path.size);
+  if (!in_out_abs_path) {
+    c_error_set(C_ERROR_null_ptr);
+    return -1;
+  }
+  if (in_out_abs_path->capacity < path.size) {
+    c_error_set(C_ERROR_capacity_full);
+    return -1;
+  }
 
 /// calculate the required capacity
 #ifdef _WIN32
   SetLastError(0);
-  DWORD required_len = GetFullPathName(path.data, 0, NULL, NULL);
+  DWORD abs_path_len = GetFullPathName(path.data, in_out_abs_path->data, in_out_abs_path->capacity, NULL);
   if (required_len == 0) {
     c_error_set((c_error_t)GetLastError());
-    return NULL;
+    return -1;
+  } else {
+    in_out_abs_path->size = abs_path_len;
+    return 0;
   }
 #else
   errno               = 0;
   char* absolute_path = realpath(path.data, NULL);
   if (!absolute_path) {
     c_error_set((c_error_t)errno);
-    return NULL;
+    return -1;
   }
-  size_t required_len = strlen(absolute_path);
-#endif
+  size_t abs_path_len = strlen(absolute_path);
 
-  CStrBuf* abs_path = c_str_create_with_capacity(required_len + 1, allocator, false);
-  if (!abs_path) return NULL;
-
-// get the absolute path
-#ifdef _WIN32
-  SetLastError(0);
-  DWORD abs_path_len = GetFullPathName(path.data, (DWORD)required_len, abs_path->data, NULL);
-  if (abs_path_len == 0) {
-    c_error_set((c_error_t)GetLastError());
-    return NULL;
+  if (abs_path_len >= in_out_abs_path->capacity) {
+    free(absolute_path);
+    c_error_set(C_ERROR_capacity_full);
+    return -1;
   }
-  c_str_set_len(abs_path, abs_path_len);
-#else
-  memcpy(abs_path->data, absolute_path, required_len);
-  c_str_set_len(abs_path, required_len);
+
+  memcpy(in_out_abs_path->data, absolute_path, abs_path_len);
   free(absolute_path);
+  in_out_abs_path->size                        = abs_path_len;
+  in_out_abs_path->data[in_out_abs_path->size] = '\0';
+
+  return 0;
 #endif
-  return (CStrBuf*)abs_path;
 }
 
-bool c_fs_path_is_absolute(CStr path)
+int c_fs_path_is_absolute(CPath path)
 {
-  c_fs_path_validate(path.data, path.len);
+  c_fs_path_validate(path.data, path.size);
 
 #ifdef _WIN32
-  return !PathIsRelativeA(path.data);
+  return PathIsRelativeA(path.data) ? 0 : 1;
 #else
-  return path.data[0] == C_FS_PATH_SEP[0];
+  return path.data[0] == C_FS_PATH_SEP[0] ? 0 : 1;
 #endif
 }
+
+int c_fs_path_parent(CPath* path)
+{
+  if (!path || !path->data || path->size == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return -1;
+  }
 
 #define skip_multiple_separators(ptr, orig_data)                               \
   for (; ((ptr) >= orig_data) && (*(ptr) == '/' || *(ptr) == '\\'); (ptr)--) { \
@@ -282,32 +288,21 @@ bool c_fs_path_is_absolute(CStr path)
       break;                               \
     }                                      \
   }
-bool c_fs_path_parent(CStr path, CStr* out_parent)
-{
-  if (!path.data || path.len == 0) {
-    c_error_set(C_ERROR_fs_invalid_path);
-    return false;
-  }
-  if (!out_parent) {
-    c_error_set(C_ERROR_null_ptr);
-    return false;
-  }
 
-  char* ptr = path.data + path.len - 1;
-  skip_multiple_separators(ptr, path.data);
+  char const* ptr = path->data + path->size - 1;
+  skip_multiple_separators(ptr, path->data);
 
   // skip_to_separator
-  skip_to_separator(ptr, path.data);
-  skip_multiple_separators(ptr, path.data);
+  skip_to_separator(ptr, path->data);
+  skip_multiple_separators(ptr, path->data);
 
-  if (ptr < path.data) {
-    *out_parent = (CStr){0};
-    return false;
+  if (ptr < path->data) {
+    *path = (CPath){0};
+    return -1;
   }
 
-  out_parent->data = path.data;
-  out_parent->len  = (ptrdiff_t)ptr - (ptrdiff_t)path.data + 1;
-  return true;
+  path->size = (ptrdiff_t)ptr - (ptrdiff_t)path->data + 1;
+  return 0;
 }
 
 char c_fs_path_separator(void)
@@ -320,120 +315,111 @@ size_t c_fs_path_max_len(void)
   return MAX_PATH_LEN;
 }
 
-bool c_fs_path_filename(CStr path, CStr* out_filename)
+int c_fs_path_filename(CPath* path)
 {
-  c_fs_path_validate(path.data, path.len);
-
-  if (!out_filename) {
-    c_error_set(C_ERROR_null_ptr);
-    return false;
+  if (!path || !path->data || path->size == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return -1;
   }
 
-  size_t counter = 0;
-  char*  ptr     = path.data + path.len;
-  while (--ptr >= path.data) {
+  size_t      counter = 0;
+  char const* ptr     = path->data + path->size;
+  while (--ptr >= path->data) {
     if (*ptr == '/' || *ptr == '\\') {
-      out_filename->data = ptr + 1;
-      out_filename->len  = counter;
-      return true;
+      path->data = ptr + 1;
+      path->size = counter;
+      return 0;
     }
     counter++;
   }
 
-  return false;
+  return -1;
 }
 
-bool c_fs_path_filestem(CStr path, CStr* out_filestem)
+int c_fs_path_filestem(CPath* path)
 {
-  bool status = c_fs_path_filename(path, out_filestem);
-  if (!status)
-    return status;
+  int status = c_fs_path_filename(path);
+  if (status) return status;
 
-  size_t counter = 0;
-  char*  ptr     = out_filestem->data + out_filestem->len;
-  while (--ptr >= out_filestem->data) {
+  size_t      counter = 0;
+  char const* ptr     = path->data + path->size;
+  while (--ptr >= path->data) {
     if (*ptr == '.') {
-      // out_filestem->data = out_filestem->data;
-      out_filestem->len = counter + 1;
-      return true;
+      path->size = counter + 1;
+      return 0;
     }
     counter++;
   }
 
-  return true;
+  return 0;
 }
 
-bool c_fs_path_file_extension(CStr path, CStr* out_file_extension)
+int c_fs_path_file_extension(CPath* path)
 {
-  c_fs_path_validate(path.data, path.len);
-  if (!out_file_extension) {
-    c_error_set(C_ERROR_null_ptr);
-    return false;
+  if (!path || !path->data || path->size == 0) {
+    c_error_set(C_ERROR_fs_invalid_path);
+    return -1;
   }
 
-  size_t counter = 0;
-  char*  ptr     = path.data + path.len;
-  while (--ptr >= path.data) {
+  size_t      counter = 0;
+  char const* ptr     = path->data + path->size;
+  while (--ptr >= path->data) {
     if (*ptr == '.') {
-      out_file_extension->data = ptr + 1;
-      out_file_extension->len  = counter + 1;
-      return true;
+      path->data = ptr + 1;
+      path->size = counter + 1;
+      return 0;
     }
     counter++;
   }
 
-  return false;
+  return -1;
 }
 
-CIter c_fs_path_iter(CStr path)
+// CIter c_fs_path_iter(CPath path)
+// {
+//   CIter iter     = {0};
+//   iter.data      = path.data;
+//   iter.data_size = path.size;
+//   iter.step_size = sizeof(char);
+//   iter.ptr       = path.data + path.size;
+
+//   return iter;
+// }
+
+// int c_fs_path_iter_component_next(CIter* iter, CStr* out_component)
+// {
+//   if (!iter) {
+//     c_error_set(C_ERROR_null_ptr);
+//     return -1;
+//   }
+
+//   out_component->size = 0;
+
+//   // skip multiple separators
+//   for (; ((iter->ptr) >= iter->data) &&
+//          (*(char*)(iter->ptr) == '/' || *(char*)(iter->ptr) == '\\');
+//        iter->ptr = (char*)(iter->ptr) - 1) {
+//   }
+//   // skip to separator
+//   for (; ((iter->ptr) >= iter->data) &&
+//          (*(char*)(iter->ptr) != '/' && *(char*)(iter->ptr) != '\\');
+//        iter->ptr = (char*)(iter->ptr) - 1) {
+//     out_component->size++;
+//   }
+
+//   if (iter->ptr < iter->data)
+//     return -1;
+
+//   out_component->data = (char*)iter->ptr + 1;
+//   return 0;
+// }
+
+int c_fs_path_metadata(CPath path, CFsMetadata* out_metadata)
 {
-  CIter iter     = {0};
-  iter.data      = path.data;
-  iter.data_size = path.len;
-  iter.step_size = sizeof(char);
-  iter.ptr       = path.data + path.len;
-
-  return iter;
-}
-
-bool c_fs_path_iter_component_next(CIter* iter, CStr* out_component)
-{
-  if (!iter) {
-    c_error_set(C_ERROR_null_ptr);
-    return false;
-  }
-
-  out_component->len = 0;
-
-  // skip multiple separators
-  for (; ((iter->ptr) >= iter->data) &&
-         (*(char*)(iter->ptr) == '/' || *(char*)(iter->ptr) == '\\');
-       iter->ptr = (char*)(iter->ptr) - 1) {
-  }
-  // skip to separator
-  for (; ((iter->ptr) >= iter->data) &&
-         (*(char*)(iter->ptr) != '/' && *(char*)(iter->ptr) != '\\');
-       iter->ptr = (char*)(iter->ptr) - 1) {
-    out_component->len++;
-  }
-
-  if (iter->ptr < iter->data)
-    return false;
-
-  out_component->data = (char*)iter->ptr + 1;
-  return true;
-}
-
-bool c_fs_path_metadata(CStr path, CFsMetadata* out_metadata)
-{
-  c_fs_path_validate(path.data, path.len);
-  if (path.data[path.len] != '\0') {
-    c_error_set(C_ERROR_none_terminated_raw_str);
-    return false;
-  }
+  c_fs_path_validate(path.data, path.size);
   if (!out_metadata) {
     c_error_set(C_ERROR_null_ptr);
-    return false;
+    return -1;
   }
 
   CFsMetadata metadata = {0};
@@ -444,7 +430,7 @@ bool c_fs_path_metadata(CStr path, CFsMetadata* out_metadata)
   int          status = _stat(path.data, &s);
   if (status) {
     c_error_set(errno);
-    return false;
+    return -1;
   }
 
   // file type
@@ -456,12 +442,7 @@ bool c_fs_path_metadata(CStr path, CFsMetadata* out_metadata)
   } else {
     // Use FindFirstFile to check for reparse point attributes
     WIN32_FIND_DATA findFileData;
-    SetLastError(0);
-    HANDLE hfind = FindFirstFile(path.data, &findFileData);
-    if (hfind == INVALID_HANDLE_VALUE) {
-      c_error_set(GetLastError());
-      return false;
-    }
+    HANDLE          hfind = FindFirstFile(path.data, &findFileData);
     FindClose(hfind);
 
     // Check if the file has the reparse point attribute
@@ -488,7 +469,7 @@ bool c_fs_path_metadata(CStr path, CFsMetadata* out_metadata)
   int         status = stat(path.data, &s);
   if (status) {
     c_error_set(errno);
-    return false;
+    return -1;
   }
 
   // file type
@@ -510,27 +491,31 @@ bool c_fs_path_metadata(CStr path, CFsMetadata* out_metadata)
   *out_metadata = metadata;
 #endif
 
-  return true;
+  return 0;
 }
 
-bool c_fs_dir_create(CStr dir_path)
+int c_fs_dir_create(CPath dir_path)
 {
 #if defined(_WIN32)
   SetLastError(0);
   BOOL dir_created = CreateDirectoryA(dir_path.data, NULL);
-  if (!dir_created)
+  if (!dir_created) {
     c_error_set((c_error_t)GetLastError());
-  return dir_created;
+    return -1;
+  }
 #else
   errno          = 0;
   int dir_status = mkdir(dir_path.data, ~umask(0));
-  if (dir_status != 0)
+  if (dir_status != 0) {
     c_error_set((c_error_t)errno);
-  return dir_status == 0;
+    return -1;
+  }
 #endif
+
+  return 0;
 }
 
-int c_fs_is_dir(CStr const dir_path)
+int c_fs_is_dir(CPath const dir_path)
 {
 #if defined(_WIN32)
   SetLastError(0);
@@ -538,14 +523,11 @@ int c_fs_is_dir(CStr const dir_path)
   if (path_attributes == INVALID_FILE_ATTRIBUTES) {
     c_error_set((c_error_t)GetLastError());
     return -1;
-  }
-
-  else if ((path_attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY) {
+  } else if ((path_attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY) {
     return 0;
+  } else {
+    return 1;
   }
-
-  // c_error_set((c_error_t)ERROR_DIRECTORY);
-  return 1;
 #else
   struct stat sb      = {0};
   errno               = 0;
@@ -553,62 +535,38 @@ int c_fs_is_dir(CStr const dir_path)
   if (path_attributes != 0) {
     c_error_set((c_error_t)errno);
     return -1;
+  } else if (S_ISDIR(sb.st_mode) == 0) {
+    return 1; // not a directory
+  } else {
+    return 0;
   }
-
-  // not a directory
-  if (S_ISDIR(sb.st_mode) == 0) {
-    // c_error_set((c_error_t)ENOTDIR);
-    return 1;
-  }
-
-  return 0;
 #endif
 }
 
-int c_fs_is_file(CStr const path)
+int c_fs_is_file(CPath path)
 {
-#if defined(_WIN32)
-  SetLastError(0);
-  size_t path_attributes = GetFileAttributesA(path.data);
-  if (path_attributes == INVALID_FILE_ATTRIBUTES) {
-    c_error_set((c_error_t)GetLastError());
-    return -1;
-  }
-
-  else if ((path_attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY) {
-    return 0;
-  }
-
-  // c_error_set((c_error_t)ERROR_DIRECTORY);
-  return 1;
-#else
-  struct stat sb      = {0};
-  errno               = 0;
-  int path_attributes = stat(path.data, &sb);
-  if (path_attributes != 0) {
-    c_error_set((c_error_t)errno);
-    return -1;
-  }
-
-  // not a file
-  if (S_ISREG(sb.st_mode) == 0) return 1;
-
-  return 0;
-#endif
+  int is_dir = c_fs_is_dir(path);
+  return is_dir != -1 ? !is_dir : -1;
 }
 
-int c_fs_is_symlink(CStr const path)
+int c_fs_is_symlink(CPath const path)
 {
 #if defined(_WIN32)
   SetLastError(0);
-  size_t path_attributes = GetFileAttributesA(path.data);
-  if (path_attributes == INVALID_FILE_ATTRIBUTES) {
+  WIN32_FIND_DATA findFileData;
+  HANDLE          hfind = FindFirstFile(path.data, &findFileData);
+  if (hfind == INVALID_HANDLE_VALUE) {
     c_error_set((c_error_t)GetLastError());
     return -1;
   }
+  FindClose(hfind);
 
-  else if ((path_attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY) {
-    return 0;
+  // Check if the file has the reparse point attribute
+  if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+    // Further check if it is a symbolic link
+    if (findFileData.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
+      return 0;
+    }
   }
 
   return 1;
@@ -619,130 +577,89 @@ int c_fs_is_symlink(CStr const path)
   if (path_attributes != 0) {
     c_error_set((c_error_t)errno);
     return -1;
+  } else if (S_ISLNK(sb.st_mode) == 0) {
+    return 1; // not a symlink
+  } else {
+    return 0;
   }
-
-  // not a symlink
-  if (S_ISLNK(sb.st_mode) == 0) return 1;
-
-  return 0;
 #endif
 }
 
-CStrBuf* c_fs_dir_current(CAllocator* allocator)
+int c_fs_dir_current(CPathBuf* in_out_dir_path)
 {
-  size_t required_path_len;
+  size_t path_len = 0;
 
 #ifdef _WIN32
   SetLastError(0);
-  required_path_len = (size_t)GetCurrentDirectory(0, NULL);
-  if (required_path_len == 0) {
+  path_len = (size_t)GetCurrentDirectory(in_out_dir_path->capacity, in_out_dir_path->data);
+  if (path_len == 0) {
     c_error_set((c_error_t)GetLastError());
-    return NULL;
+    return -1;
   }
 #else
   errno         = 0;
-  char* cur_dir = getcwd(NULL, 0);
+  char* cur_dir = getcwd(in_out_dir_path->data, in_out_dir_path->capacity);
   if (!cur_dir) {
     c_error_set((c_error_t)errno);
-    return NULL;
+    return -1;
   }
-  required_path_len = strlen(cur_dir);
+  path_len = strlen(cur_dir);
 #endif
-
-  CStrBuf* result_cur_dir = c_str_create_with_capacity(required_path_len + 1, allocator, false);
-  if (!result_cur_dir) return NULL;
-
-  c_str_set_len(result_cur_dir, required_path_len);
-
-#ifdef _WIN32
-  SetLastError(0);
-  DWORD result_path_len = GetCurrentDirectory(required_path_len, result_cur_dir->data);
-  if (result_path_len <= 0) {
-    c_error_set((c_error_t)GetLastError());
-    c_str_destroy(result_cur_dir);
-    return NULL;
-  }
-#else
-  memcpy(result_cur_dir->data, cur_dir, required_path_len);
-  free(cur_dir);
-#endif
-
-  return (CStrBuf*)result_cur_dir;
+  in_out_dir_path->size = path_len;
+  return 0;
 }
 
-CStrBuf* c_fs_dir_current_exe(CAllocator* allocator)
+int c_fs_dir_current_exe(CPathBuf* in_out_dir_path)
 {
-  size_t   expected_path_len = 0;
-  CStrBuf* cur_exe_path      = c_str_create_with_capacity(255, allocator, false);
-  if (!cur_exe_path)
-    return NULL;
-  size_t path_capacity = c_str_capacity(cur_exe_path);
+  size_t path_len = 0;
 
 #ifdef _WIN32
   SetLastError(0);
-  expected_path_len = (size_t)GetModuleFileNameA(NULL, cur_exe_path->data, path_capacity);
-  if (expected_path_len == 0) {
+  path_len = (size_t)GetModuleFileName(NULL, in_out_dir_path->data, in_out_dir_path->capacity);
+  if (path_len == 0) {
     c_error_set((c_error_t)GetLastError());
-    goto ON_ERROR;
+    return -1;
   }
 #else
-  errno       = 0;
-  ssize_t len = readlink("/proc/self/exe", cur_exe_path->data, path_capacity);
-  if (len == -1) {
+  errno              = 0;
+  ssize_t result_len = readlink("/proc/self/exe", in_out_dir_path->data, in_out_dir_path->capacity - 1);
+  if (result_len == -1) {
     c_error_set((c_error_t)errno);
-    goto ON_ERROR;
-  }
-  expected_path_len = len;
-#endif
-
-  while (expected_path_len >= path_capacity) {
-    path_capacity *= 2;
-    bool status = c_str_set_capacity(cur_exe_path, path_capacity);
-    if (!status) goto ON_ERROR;
-#ifdef _WIN32
-    SetLastError(0);
-    expected_path_len = (size_t)GetModuleFileName(NULL, cur_exe_path->data, path_capacity);
-    if (expected_path_len == 0) {
-      c_error_set((c_error_t)GetLastError());
-      goto ON_ERROR;
-    }
-#else
-    errno       = 0;
-    ssize_t len = readlink("/proc/self/exe", cur_exe_path->data, path_capacity);
-    if (len == -1) {
-      c_error_set((c_error_t)errno);
-      goto ON_ERROR;
-    }
-    expected_path_len = len;
-#endif
+    return -1;
   }
 
-  c_str_set_len(cur_exe_path, expected_path_len);
-  return (CStrBuf*)cur_exe_path;
+  path_len                        = result_len;
+  in_out_dir_path->data[path_len] = '\0';
+#endif
 
-ON_ERROR:
-  c_str_destroy(cur_exe_path);
-  return NULL;
+  in_out_dir_path->size = path_len;
+  return 0;
 }
 
-bool c_fs_dir_change_current(CStr new_path)
+int c_fs_dir_change_current(CPath new_path)
 {
+  c_fs_path_validate(new_path.data, new_path.size);
+
 #ifdef _WIN32
   SetLastError(0);
   BOOL status = SetCurrentDirectory(new_path.data);
-  if (!status)
+  if (!status) {
     c_error_set((c_error_t)GetLastError());
-  return status;
+    return -1;
+  }
 #else
   errno      = 0;
   int status = chdir(new_path.data);
-  if (status)
+  if (status) {
     c_error_set((c_error_t)errno);
-  return status == 0;
+    return -1;
+  }
 #endif
+
+  return 0;
 }
 
-int c_fs_dir_is_empty(CStr path)
+int c_fs_dir_is_empty(CPath path)
 {
   int result = 0;
 
@@ -766,13 +683,7 @@ int c_fs_dir_is_empty(CStr path)
     break;
   } while (FindNextFileA(find_handler, &cur_file));
 
-  SetLastError(0);
-  if (!FindClose(find_handler)) {
-    c_error_set((c_error_t)GetLastError());
-    result = -1;
-  } else {
-    result = 0;
-  }
+  FindClose(find_handler);
   return result;
 #else
   errno = 0;
@@ -796,18 +707,12 @@ int c_fs_dir_is_empty(CStr path)
     break;
   }
 
-  errno = 0;
-  if (closedir(dir) != 0) {
-    c_error_set((c_error_t)errno);
-    result = -1;
-  } else {
-    result = 0;
-  }
+  closedir(dir);
   return result;
 #endif
 }
 
-int c_fs_exists(CStr const path)
+int c_fs_exists(CPath const path)
 {
   assert(path.data);
 
@@ -816,10 +721,10 @@ int c_fs_exists(CStr const path)
   DWORD stat_status = GetFileAttributesA(path.data);
   if (stat_status == INVALID_FILE_ATTRIBUTES) {
     DWORD last_error = GetLastError();
-    if (last_error == ERROR_FILE_NOT_FOUND || last_error == ERROR_PATH_NOT_FOUND) {
+    if (last_error == ERROR_PATH_NOT_FOUND) {
       return 1;
     } else {
-      c_error_set((c_error_t)last_error);
+      c_error_set(last_error);
       return -1;
     }
   }
@@ -841,207 +746,202 @@ int c_fs_exists(CStr const path)
 #endif
 }
 
-bool c_fs_delete(CStr const path)
+int c_fs_delete(CPath path)
 {
-  assert(path.data);
+  c_fs_path_validate(path.data, path.size);
 
 #if defined(_WIN32)
-  DWORD dwAttrib = GetFileAttributesA(path.data);
-
-  if (dwAttrib & FILE_ATTRIBUTE_DIRECTORY) {
-    SetLastError(0);
-    BOOL remove_dir_status = RemoveDirectoryA(path.data);
-    if (!remove_dir_status) {
-      c_error_set((c_error_t)GetLastError());
-      return false;
-    }
-
-    return true;
+  BOOL remove_dir_status = RemoveDirectoryA(path.data);
+  if (!remove_dir_status) {
+    c_error_set((c_error_t)GetLastError());
+    return -1;
   }
+
+  return 0;
 #endif
 
   errno             = 0;
   int remove_status = remove(path.data);
-  if (remove_status != 0) {
+  if (remove_status) {
     c_error_set((c_error_t)errno);
-    return false;
+    return -1;
   }
 
-  return true;
+  return 0;
 }
 
-bool c_fs_delete_recursively(CStrBuf* path)
-{
-  assert(path);
+// int c_fs_delete_recursively(CPathBuf* path)
+// {
+//   assert(path);
 
-  CFsIter iter = c_fs_iter(path);
+//   CFsIter iter = c_fs_iter(path);
 
-  CStr cur_path = {0};
-  while (c_fs_iter_next(&iter, &cur_path)) {
-    // skip . and ..
-    CStr filename;
-    c_fs_path_filename(cur_path, &filename);
-    if ((strcmp(".", filename.data) == 0) || (strcmp("..", filename.data) == 0))
-      continue;
+//   CPath cur_path = {0};
+//   while (c_fs_iter_next(&iter, &cur_path)) {
+//     // skip . and ..
+//     CPath filename;
+//     c_fs_path_filename(cur_path, &filename);
+//     if ((strcmp(".", filename.data) == 0) || (strcmp("..", filename.data) == 0))
+//       continue;
 
-    if (c_fs_is_dir(cur_path) == 0) {
-      bool status = c_fs_delete_recursively(iter.pathbuf);
-      if (!status)
-        return status;
-    } else {
-      c_fs_delete(cur_path);
-    }
-  }
+//     if (c_fs_is_dir(cur_path) == 0) {
+//       int status = c_fs_delete_recursively(iter.pathbuf);
+//       if (!status)
+//         return status;
+//     } else {
+//       c_fs_delete(cur_path);
+//     }
+//   }
 
-  bool status = c_fs_iter_close(&iter);
-  if (!status)
-    return false;
+//   int status = c_fs_iter_close(&iter);
+//   if (!status)
+//     return -1;
 
-  if (cur_path.data) {
-    return c_fs_delete(cur_path);
-  } else {
-    c_error_set(C_ERROR_fs_invalid_path);
-    return false;
-  }
-}
+//   if (cur_path.data) {
+//     return c_fs_delete(cur_path);
+//   } else {
+//     c_error_set(C_ERROR_fs_invalid_path);
+//     return -1;
+//   }
+// }
 
-CFsIter c_fs_iter(CStrBuf* path)
-{
-  CFsIter iter = {0};
-  iter.pathbuf = path;
+// CFsIter c_fs_iter(CPathBuf* path)
+// {
+//   CFsIter iter = {0};
+//   iter.pathbuf = path;
 
-  return iter;
-}
+//   return iter;
+// }
 
-bool c_fs_iter_next(CFsIter* iter, CStr* out_cur_path)
-{
-  assert(iter);
+// int c_fs_iter_next(CFsIter* iter, CStr* out_cur_path)
+// {
+//   assert(iter);
 
-  if (!iter || !iter->pathbuf) {
-    c_error_set(C_ERROR_invalid_iterator);
-    return false;
-  }
+//   if (!iter || !iter->pathbuf) {
+//     c_error_set(C_ERROR_invalid_iterator);
+//     return -1;
+//   }
 
-#if defined(_WIN32)
-  // if (!iter->cur_dir) {
-  //   errno         = 0;
-  //   iter->cur_dir = opendir(iter->pathbuf->data);
-  //   if (!iter->cur_dir) {
-  //     c_error_set(errno);
-  //     return false;
-  //   }
-  // }
+// #if defined(_WIN32)
+//   // if (!iter->cur_dir) {
+//   //   errno         = 0;
+//   //   iter->cur_dir = opendir(iter->pathbuf->data);
+//   //   if (!iter->cur_dir) {
+//   //     c_error_set(errno);
+//   //     return -1;
+//   //   }
+//   // }
 
-  WIN32_FIND_DATAA cur_file;
-  if (!iter->cur_dir) {
-    iter->old_len = c_str_len(iter->pathbuf);
-    bool status   = c_str_push(iter->pathbuf, CSTR("\\*"));
-    if (!status) return false;
+//   WIN32_FIND_DATAA cur_file;
+//   if (!iter->cur_dir) {
+//     iter->old_len = c_str_len(iter->pathbuf);
+//     int status    = c_str_push(iter->pathbuf, CSTR("\\*"));
+//     if (!status) return -1;
 
-    SetLastError(0);
-    HANDLE find_handler = FindFirstFileA(iter->pathbuf->data, &cur_file);
-    if (find_handler == INVALID_HANDLE_VALUE) {
-      c_error_set(GetLastError());
-      return false;
-    }
+//     SetLastError(0);
+//     HANDLE find_handler = FindFirstFileA(iter->pathbuf->data, &cur_file);
+//     if (find_handler == INVALID_HANDLE_VALUE) {
+//       c_error_set(GetLastError());
+//       return -1;
+//     }
 
-    iter->cur_dir = find_handler;
-  } else {
-    bool status = FindNextFileA((HANDLE)iter->cur_dir, &cur_file);
-    if (!status) return false;
-  }
+//     iter->cur_dir = find_handler;
+//   } else {
+//     int status = FindNextFileA((HANDLE)iter->cur_dir, &cur_file);
+//     if (!status) return -1;
+//   }
 
-  // c_str_set_len(iter->pathbuf, iter->old_len);
+//   // c_str_set_len(iter->pathbuf, iter->old_len);
 
-  // if (find_handler == INVALID_HANDLE_VALUE) {
-  //   c_error_set(GetLastError());
-  //   return false;
-  // }
+//   // if (find_handler == INVALID_HANDLE_VALUE) {
+//   //   c_error_set(GetLastError());
+//   //   return -1;
+//   // }
 
-  // skip '.' and '..'
-  // if ((strcmp(cur_file.cFileName, ".") == 0) || (strcmp(cur_file.cFileName, "..") == 0)) continue;
+//   // skip '.' and '..'
+//   // if ((strcmp(cur_file.cFileName, ".") == 0) || (strcmp(cur_file.cFileName, "..") == 0)) continue;
 
-  ////
-  size_t filename_len = strlen(cur_file.cFileName);
-  // iter->old_len       = c_str_len(iter->pathbuf);
-  // bool status         = c_str_push(iter->pathbuf, (CStr){.data = cur_file.cFileName, .len = filename_len});
-  // if (!status) return false;
-  ////
+//   ////
+//   size_t filename_len = strlen(cur_file.cFileName);
+//   // iter->old_len       = c_str_len(iter->pathbuf);
+//   // int status         = c_str_push(iter->pathbuf, (CStr){.data = cur_file.cFileName, .len = filename_len});
+//   // if (!status) return -1;
+//   ////
 
-  c_str_set_len(iter->pathbuf, iter->old_len);
-  iter->old_len = c_str_len(iter->pathbuf);
+//   c_str_set_len(iter->pathbuf, iter->old_len);
+//   iter->old_len = c_str_len(iter->pathbuf);
 
-  bool status = c_str_push(iter->pathbuf, CSTR(C_FS_PATH_SEP));
-  if (!status) return status;
-  status = c_str_push(iter->pathbuf, (CStr){.data = cur_file.cFileName, .len = filename_len});
-  if (!status) return status;
+//   int status = c_str_push(iter->pathbuf, CSTR(C_FS_PATH_SEP));
+//   if (!status) return status;
+//   status = c_str_push(iter->pathbuf, (CStr){.data = cur_file.cFileName, .len = filename_len});
+//   if (!status) return status;
 
-    // size_t old_len         = path_buf_len;
-    // path_buf_len           = path_buf_len - 1 + filename_len;
-    // path_buf[path_buf_len] = '\0';
-    // c_error_t err = handler(path_buf, path_buf_len, extra_data);
-    // path_buf_len  = old_len;
-    // if (err.code != C_ERROR_none.code) {
-    //   break;
-    // }
+//     // size_t old_len         = path_buf_len;
+//     // path_buf_len           = path_buf_len - 1 + filename_len;
+//     // path_buf[path_buf_len] = '\0';
+//     // c_error_t err = handler(path_buf, path_buf_len, extra_data);
+//     // path_buf_len  = old_len;
+//     // if (err.code != C_ERROR_none.code) {
+//     //   break;
+//     // }
 
-    // SetLastError(0);
-    // if (!FindClose(find_handler)) {
-    //   path_buf[orig_path_len] = '\0';
-    //   err                     = (c_error_t)GetLastError();
-    //   goto Error;
-    // }
-#else
-  if (!iter->cur_dir) {
-    errno         = 0;
-    iter->cur_dir = opendir(iter->pathbuf->data);
-    if (!iter->cur_dir) {
-      c_error_set(errno);
-      return false;
-    }
-  }
+//     // SetLastError(0);
+//     // if (!FindClose(find_handler)) {
+//     //   path_buf[orig_path_len] = '\0';
+//     //   err                     = (c_error_t)GetLastError();
+//     //   goto Error;
+//     // }
+// #else
+//   if (!iter->cur_dir) {
+//     errno         = 0;
+//     iter->cur_dir = opendir(iter->pathbuf->data);
+//     if (!iter->cur_dir) {
+//       c_error_set(errno);
+//       return -1;
+//     }
+//   }
 
-  struct dirent* cur_dir_properties = readdir(iter->cur_dir);
-  if (!(cur_dir_properties))
-    return false;
+//   struct dirent* cur_dir_properties = readdir(iter->cur_dir);
+//   if (!(cur_dir_properties))
+//     return -1;
 
-  size_t filename_len = strlen(cur_dir_properties->d_name);
+//   size_t filename_len = strlen(cur_dir_properties->d_name);
 
-  if (iter->old_len) c_str_set_len(iter->pathbuf, iter->old_len);
-  iter->old_len = c_str_len(iter->pathbuf);
+//   if (iter->old_len) c_str_set_len(iter->pathbuf, iter->old_len);
+//   iter->old_len = c_str_len(iter->pathbuf);
 
-  bool status = c_str_push(iter->pathbuf, CSTR(C_FS_PATH_SEP));
-  if (!status) return status;
-  status = c_str_push(iter->pathbuf, (CStr){cur_dir_properties->d_name, filename_len});
-  if (!status) return status;
-#endif
+//   int status = c_str_push(iter->pathbuf, CSTR(C_FS_PATH_SEP));
+//   if (!status) return status;
+//   status = c_str_push(iter->pathbuf, (CStr){cur_dir_properties->d_name, filename_len});
+//   if (!status) return status;
+// #endif
 
-  if (out_cur_path) *out_cur_path = c_cstrbuf_to_cstr(iter->pathbuf);
-  return true;
-}
+//   if (out_cur_path) *out_cur_path = c_cstrbuf_to_cstr(iter->pathbuf);
+//   return 0;
+// }
 
-bool c_fs_iter_close(CFsIter* iter)
-{
-  if (iter && iter->cur_dir) {
-#ifdef _WIN32
-    SetLastError(0);
-    if (!FindClose((HANDLE)iter->cur_dir)) {
-      c_error_set(GetLastError());
-      return false;
-    }
-#else
-    errno = 0;
-    if (closedir(iter->cur_dir) != 0) {
-      c_error_set(errno);
-      return false;
-    }
-#endif
-    c_str_set_len(iter->pathbuf, iter->old_len);
-    *iter = (CFsIter){0};
-  }
+// int c_fs_iter_close(CFsIter* iter)
+// {
+//   if (iter && iter->cur_dir) {
+// #ifdef _WIN32
+//     SetLastError(0);
+//     if (!FindClose((HANDLE)iter->cur_dir)) {
+//       c_error_set(GetLastError());
+//       return -1;
+//     }
+// #else
+//     errno = 0;
+//     if (closedir(iter->cur_dir) != 0) {
+//       c_error_set(errno);
+//       return -1;
+//     }
+// #endif
+//     c_str_set_len(iter->pathbuf, iter->old_len);
+//     *iter = (CFsIter){0};
+//   }
 
-  return true;
-}
+//   return 0;
+// }
 
 // ------------------------- internal ------------------------- //
 

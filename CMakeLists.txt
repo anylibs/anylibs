@@ -1,6 +1,13 @@
 include("options.cmake")
 include("deps.cmake")
 
+# # Set Zig as the C++ compiler
+# set(CMAKE_C_COMPILER "zig")
+# set(CMAKE_C_COMPILER_ARG1 "c")
+
+# # Specify target architecture and platform
+# set(CMAKE_C_FLAGS "--target=x86_64-windows-gnu")
+
 cmake_minimum_required(VERSION 3.20)
 project(anylibs LANGUAGES C)
 
