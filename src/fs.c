@@ -813,15 +813,10 @@ int c_fs_delete_recursively(CPathBuf* path)
   }
   if (next_status == -1) goto ON_ERROR;
 
-  int status = c_fs_iter_close(&iter);
-  if (status) return -1;
+  int err = c_fs_iter_close(&iter);
+  if (err) return -1;
 
-  if (cur_path.data) {
-    return c_fs_delete(cur_path);
-  } else {
-    c_error_set(C_ERROR_fs_invalid_path);
-    return -1;
-  }
+  return c_fs_delete(cur_path);
 ON_ERROR:
   c_fs_iter_close(&iter);
   return -1;
