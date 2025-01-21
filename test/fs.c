@@ -13,30 +13,32 @@
     .data = (path), .size = strlen(path) \
   }
 
-// UTEST(CFsIter, iter)
-// {
-//   CPathBuf* path = c_str_create_from_raw(CPATH(ANYLIBS_C_TEST_PLAYGROUND), true, NULL);
-//   ASSERT_TRUE_MSG(path, c_error_to_str(c_error_get()));
+UTEST(CFsIter, iter)
+{
+  enum { buf_size = 1024 };
+  char     buf[buf_size] = ANYLIBS_C_TEST_PLAYGROUND;
+  CPathBuf pathbuf       = c_fs_pathbuf_create(buf, strlen(buf), buf_size);
 
-//   CFsIter iter = c_fs_iter(path);
-//   CPath    result;
-//   bool    has_at_least_one_file = false;
-//   while (c_fs_iter_next(&iter, &result)) {
-//     has_at_least_one_file = true;
+  CFsIter iter;
+  EXPECT_TRUE(c_fs_iter(&pathbuf, &iter) == 0);
+  CPathRef result;
+  bool     has_at_least_one_file = false;
+  while (c_fs_iter_next(&iter, &result) == 0) {
+    has_at_least_one_file = true;
 
-//     size_t f_size = 0;
-//     if (c_fs_is_dir(result) != 0) {
-//       CFile* f = c_fs_file_open(result, CPATH("r"));
-//       EXPECT_TRUE_MSG(f, c_error_to_str(c_error_get()));
-//       EXPECT_TRUE_MSG(c_fs_file_size(f, &f_size),
-//                       c_error_to_str(c_error_get()));
-//     }
-//   }
-//   EXPECT_TRUE(has_at_least_one_file);
+    size_t f_size = 0;
+    if (c_fs_is_dir(c_fs_cpathref_to_cpath(result)) != 0) {
+      CFile* f = c_fs_file_open(c_fs_cpathref_to_cpath(result), "r", 1);
+      EXPECT_TRUE(f);
+      EXPECT_TRUE(c_fs_file_size(f, &f_size) == 0);
+      break;
+    }
+  }
+  EXPECT_TRUE(has_at_least_one_file);
 
-//   c_fs_iter_close(&iter);
-//   c_str_destroy(path);
-// }
+  c_fs_iter_close(&iter);
+  EXPECT_STRNEQ(ANYLIBS_C_TEST_PLAYGROUND, pathbuf.data, pathbuf.size);
+}
 
 UTEST(CFile, file)
 {
@@ -197,43 +199,43 @@ UTEST(CDir, current_exe_dir)
   EXPECT_TRUE(c_fs_is_file(c_fs_path_create(pathbuf.data, pathbuf.size)) == 0);
 }
 
-// UTEST(CDir, delete_recursively)
-// {
-//   enum { buf_size = 1024 };
-//   char     buf[buf_size] = ANYLIBS_C_TEST_PLAYGROUND "/folder";
-//   CPathBuf pathbuf       = c_fs_pathbuf_create(buf, strlen(buf), buf_size);
-//   CPath    path          = c_fs_path_create(buf, pathbuf.size);
+UTEST(CDir, delete_recursively)
+{
+  enum { buf_size = 1024 };
+  char     buf[buf_size] = ANYLIBS_C_TEST_PLAYGROUND "/folder";
+  CPathBuf pathbuf       = c_fs_pathbuf_create(buf, strlen(buf), buf_size);
+  CPath    path          = c_fs_path_create(buf, pathbuf.size);
 
-//   ASSERT_TRUE(c_fs_exists(path) != 0);
-//   ASSERT_TRUE(c_fs_dir_create(path) == 0);
+  ASSERT_TRUE(c_fs_exists(path) != 0);
+  ASSERT_TRUE(c_fs_dir_create(path) == 0);
 
-//   CFile* f = c_fs_file_open(CPATH(ANYLIBS_C_TEST_PLAYGROUND "/folder/file"), "w", 1);
-//   ASSERT_TRUE(f);
-//   EXPECT_TRUE(c_fs_file_write(f, "Hello World", sizeof("Hello World") - 1, sizeof(char)) > 0);
-//   EXPECT_TRUE(c_fs_file_close(f) == 0);
+  CFile* f = c_fs_file_open(CPATH(ANYLIBS_C_TEST_PLAYGROUND "/folder/file"), "w", 1);
+  ASSERT_TRUE(f);
+  EXPECT_TRUE(c_fs_file_write(f, "Hello World", sizeof("Hello World") - 1, sizeof(char)) > 0);
+  EXPECT_TRUE(c_fs_file_close(f) == 0);
 
-//   CPath dir2 = CPATH(ANYLIBS_C_TEST_PLAYGROUND "/folder/folder2");
-//   ASSERT_TRUE(c_fs_exists(dir2) != 0);
-//   ASSERT_TRUE(c_fs_dir_create(dir2));
+  CPath dir2 = CPATH(ANYLIBS_C_TEST_PLAYGROUND "/folder/folder2");
+  ASSERT_TRUE(c_fs_exists(dir2) != 0);
+  ASSERT_TRUE(c_fs_dir_create(dir2) == 0);
 
-//   EXPECT_TRUE(c_fs_delete_recursively(&pathbuf) == 0);
-// }
+  EXPECT_TRUE(c_fs_delete_recursively(&pathbuf) == 0);
+}
 
-// UTEST(CPath, delete_recursively_file)
-// {
-//   enum { buf_size = 1024 };
-//   char     buf[buf_size] = ANYLIBS_C_TEST_PLAYGROUND "/file";
-//   CPathBuf pathbuf       = c_fs_pathbuf_create(buf, strlen(buf), buf_size);
-//   CPath    path          = c_fs_path_create(buf, pathbuf.size);
+UTEST(CPath, delete_recursively_file)
+{
+  enum { buf_size = 1024 };
+  char     buf[buf_size] = ANYLIBS_C_TEST_PLAYGROUND "/file";
+  CPathBuf pathbuf       = c_fs_pathbuf_create(buf, strlen(buf), buf_size);
+  CPath    path          = c_fs_path_create(buf, pathbuf.size);
 
-//   CFile* f = c_fs_file_open(path, "w", 1);
-//   ASSERT_TRUE(f);
-//   EXPECT_TRUE(c_fs_file_write(f, "Hello World", sizeof("Hello World") - 1, sizeof(char)) > 0);
-//   EXPECT_TRUE(c_fs_file_close(f) == 0);
+  CFile* f = c_fs_file_open(path, "w", 1);
+  ASSERT_TRUE(f);
+  EXPECT_TRUE(c_fs_file_write(f, "Hello World", sizeof("Hello World") - 1, sizeof(char)) > 0);
+  EXPECT_TRUE(c_fs_file_close(f) == 0);
 
-//   EXPECT_FALSE(c_fs_delete_recursively(&pathbuf) == 0);
-//   EXPECT_TRUE(c_fs_delete(path) == 0);
-// }
+  EXPECT_FALSE(c_fs_delete_recursively(&pathbuf) == 0);
+  EXPECT_TRUE(c_fs_delete(path) == 0);
+}
 
 UTEST(CPath, parent)
 {
