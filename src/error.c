@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -72,7 +71,7 @@ static void c_error_callback_internal_fn(c_error_t err, CStr function_name,
 
 #ifdef _WIN32
 /// TODO: it solves an issue with clang and qemu I have to use int instead of bool
-static int c_error_initiated = false;
+static int       c_error_initiated = false;
 static c_error_t c_error           = C_ERROR_none;
 #else
 static _Atomic(bool)      c_error_initiated = false;

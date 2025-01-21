@@ -17,6 +17,9 @@
 #include <libgen.h>
 #include <unistd.h>
 #endif
+#ifdef __APPLE__
+#include <libproc.h>
+#endif
 
 #ifdef _WIN32
 #define C_FS_PATH_SEP "\\"
@@ -482,10 +485,16 @@ int c_fs_path_metadata(CPath path, CFsMetadata* out_metadata)
   metadata.fsize = s.st_size;
   // permissions
   metadata.fperm = (s.st_mode & S_IWUSR) ? C_FS_FILE_PERMISSION_read_write : C_FS_FILE_PERMISSION_read_only;
-  // times
+// times
+#ifdef __APPLE__
+  metadata.created_time  = s.st_ctimespec.tv_sec;
+  metadata.last_accessed = s.st_atimespec.tv_sec;
+  metadata.last_modified = s.st_mtimespec.tv_sec;
+#else
   metadata.created_time  = s.st_ctim.tv_sec;
   metadata.last_accessed = s.st_atim.tv_sec;
   metadata.last_modified = s.st_mtim.tv_sec;
+#endif
 
   *out_metadata = metadata;
 #endif
@@ -610,16 +619,27 @@ int c_fs_dir_current(CPathBuf* in_out_dir_path)
 
 int c_fs_dir_current_exe(CPathBuf* in_out_dir_path)
 {
-  size_t path_len = 0;
 
 #ifdef _WIN32
+  size_t path_len = 0;
   SetLastError(0);
   path_len = (size_t)GetModuleFileName(NULL, in_out_dir_path->data, in_out_dir_path->capacity);
   if (path_len == 0) {
     c_error_set((c_error_t)GetLastError());
     return -1;
   }
+  in_out_dir_path->size = path_len;
+#elif defined(__APPLE__)
+  pid_t pid = getpid(); // Get the current process ID
+
+  errno                 = 0;
+  in_out_dir_path->size = proc_pidpath(pid, in_out_dir_path->data, in_out_dir_path->capacity);
+  if (in_out_dir_path->size <= 0) {
+    c_error_set(errno);
+    return -1;
+  }
 #else
+  size_t path_len    = 0;
   errno              = 0;
   ssize_t result_len = readlink("/proc/self/exe", in_out_dir_path->data, in_out_dir_path->capacity - 1);
   if (result_len == -1) {
@@ -629,9 +649,9 @@ int c_fs_dir_current_exe(CPathBuf* in_out_dir_path)
 
   path_len                        = result_len;
   in_out_dir_path->data[path_len] = '\0';
+  in_out_dir_path->size           = path_len;
 #endif
 
-  in_out_dir_path->size = path_len;
   return 0;
 }
 
