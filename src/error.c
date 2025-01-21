@@ -71,7 +71,8 @@ static void c_error_callback_internal_fn(c_error_t err, CStr function_name,
                                          void* user_data);
 
 #ifdef _WIN32
-static bool      c_error_initiated = false;
+/// TODO: it solves an issue with clang and qemu I have to use int instead of bool
+static int c_error_initiated = false;
 static c_error_t c_error           = C_ERROR_none;
 #else
 static _Atomic(bool)      c_error_initiated = false;
@@ -85,8 +86,7 @@ void c_error_register_once(CErrorCallback callback, void* user_data)
 
 #ifdef _WIN32
   bool old_state = InterlockedCompareExchange((volatile long*)&c_error_initiated, true, false);
-  if (old_state)
-    return;
+  if (old_state) return;
 #else
   if (!c_error_initiated) {
     c_error_initiated = true;

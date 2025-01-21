@@ -514,7 +514,7 @@ int c_fs_dir_create(CPath dir_path)
   return 0;
 }
 
-int c_fs_is_dir(CPath const dir_path)
+int c_fs_is_dir(CPath dir_path)
 {
 #if defined(_WIN32)
   SetLastError(0);
@@ -805,13 +805,13 @@ int c_fs_delete_recursively(CPathBuf* path)
 
     if (c_fs_is_dir(cur_path) == 0) {
       int err = c_fs_delete_recursively(iter.pathbuf);
-      if (err == -1) return err;
+      if (err == -1) goto ON_ERROR;
     } else {
-      c_fs_delete(cur_path);
+      int err = c_fs_delete(cur_path);
+      if (err == -1) goto ON_ERROR;
     }
   }
-
-  if (next_status == -1) return -1;
+  if (next_status == -1) goto ON_ERROR;
 
   int status = c_fs_iter_close(&iter);
   if (status) return -1;
@@ -822,6 +822,9 @@ int c_fs_delete_recursively(CPathBuf* path)
     c_error_set(C_ERROR_fs_invalid_path);
     return -1;
   }
+ON_ERROR:
+  c_fs_iter_close(&iter);
+  return -1;
 }
 
 int c_fs_iter(CPathBuf* path, CFsIter* out_iter)
@@ -834,6 +837,7 @@ int c_fs_iter(CPathBuf* path, CFsIter* out_iter)
 
   *out_iter         = (CFsIter){0};
   out_iter->pathbuf = path;
+  out_iter->old_len = path->size;
 #ifdef _WIN32
   // sizeof("\\*" + '\0')
   if (path->capacity < path->size + 3) {
@@ -841,7 +845,6 @@ int c_fs_iter(CPathBuf* path, CFsIter* out_iter)
     return -1;
   }
 
-  out_iter->old_len        = path->size;
   path->data[path->size++] = C_FS_PATH_SEP[0];
   path->data[path->size++] = '*';
   path->data[path->size]   = '\0';
@@ -854,7 +857,6 @@ int c_fs_iter(CPathBuf* path, CFsIter* out_iter)
   }
 #endif
 
-  out_iter->old_len = path->size;
   return 0;
 }
 
@@ -875,6 +877,7 @@ int c_fs_iter_next(CFsIter* iter, CPathRef* out_cur_path)
     SetLastError(0);
     HANDLE find_handler = FindFirstFileA(iter->pathbuf->data, &cur_file);
     if (find_handler == INVALID_HANDLE_VALUE) {
+      // iter->pathbuf->data[iter->old_len] = '\0';
       c_error_set(GetLastError());
       return -1;
     }
@@ -930,26 +933,28 @@ int c_fs_iter_next(CFsIter* iter, CPathRef* out_cur_path)
 
 int c_fs_iter_close(CFsIter* iter)
 {
-  if (iter && iter->fptr) {
+  int err = 0;
+  if (!iter) return err;
+
+  if (iter->fptr) {
 #ifdef _WIN32
     SetLastError(0);
     if (!FindClose((HANDLE)iter->fptr)) {
       c_error_set(GetLastError());
-      return -1;
+      err = -1;
     }
 #else
     errno = 0;
     if (closedir(iter->fptr) != 0) {
       c_error_set(errno);
-      return -1;
+      err = -1;
     }
 #endif
-    iter->pathbuf->size                      = iter->old_len;
-    iter->pathbuf->data[iter->pathbuf->size] = '\0';
-    *iter                                    = (CFsIter){0};
   }
 
-  return 0;
+  iter->pathbuf->data[iter->old_len] = '\0';
+  *iter                              = (CFsIter){0};
+  return err;
 }
 
 // ------------------------- internal ------------------------- //
