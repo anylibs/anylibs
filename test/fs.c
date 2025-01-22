@@ -78,9 +78,6 @@ UTEST(CFile, file)
 
 UTEST(CPath, general)
 {
-  // CPathBuf* path = c_str_create_from_raw(CPATH(ANYLIBS_C_TEST_PLAYGROUND), true, NULL);
-  // ASSERT_TRUE(path);
-
   enum { buf_size = 1024 };
   char     buf[buf_size];
   CPathBuf pathbuf = c_fs_pathbuf_create(buf, 0, buf_size);
@@ -149,18 +146,6 @@ UTEST(CPath, metadata)
 
   EXPECT_TRUE(c_fs_delete(path) == 0);
 }
-
-// UTEST(CPath, iter)
-// {
-//   char*  gt[] = {"file", "folder3", "folder2", "folder1"};
-//   CPath  component;
-//   size_t counter = 0;
-//   CIter  iter    = c_fs_path_iter(CPATH("/folder1/folder2/folder3/file"));
-//   while (c_fs_path_iter_component_next(&iter, &component)) {
-//     EXPECT_STRNEQ(gt[counter++], component.data, component.size);
-//   }
-//   EXPECT_EQ(sizeof(gt) / sizeof(*gt), counter);
-// }
 
 UTEST(CDir, create_delete)
 {
@@ -274,4 +259,9 @@ UTEST(CPath, parent)
   path = CPATH("C:\\folder\\\\");
   EXPECT_TRUE(c_fs_path_parent(&path) == 0);
   EXPECT_STRNEQ("C:\\", path.data, path.size);
+
+  path = CPATH("/folder1/folder2/file");
+  do {
+    printf("%.*s\n", (int)path.size, path.data);
+  } while (c_fs_path_parent(&path) == 0);
 }

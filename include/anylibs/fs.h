@@ -85,8 +85,6 @@ char   c_fs_path_separator(void);
 int    c_fs_path_filename(CPath* path);
 int    c_fs_path_filestem(CPath* path);
 int    c_fs_path_file_extension(CPath* path);
-// CIter  c_fs_path_iter(CPath path);
-// int    c_fs_path_iter_component_next(CIter* iter, CStr* out_component);
 int    c_fs_path_metadata(CPath path, CFsMetadata* out_metadata);
 int    c_fs_dir_create(CPath dir_path);
 int    c_fs_is_dir(CPath path);

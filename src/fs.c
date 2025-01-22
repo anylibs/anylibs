@@ -377,45 +377,6 @@ int c_fs_path_file_extension(CPath* path)
   return -1;
 }
 
-// CIter c_fs_path_iter(CPath path)
-// {
-//   CIter iter     = {0};
-//   iter.data      = path.data;
-//   iter.data_size = path.size;
-//   iter.step_size = sizeof(char);
-//   iter.ptr       = path.data + path.size;
-
-//   return iter;
-// }
-
-// int c_fs_path_iter_component_next(CIter* iter, CStr* out_component)
-// {
-//   if (!iter) {
-//     c_error_set(C_ERROR_null_ptr);
-//     return -1;
-//   }
-
-//   out_component->size = 0;
-
-//   // skip multiple separators
-//   for (; ((iter->ptr) >= iter->data) &&
-//          (*(char*)(iter->ptr) == '/' || *(char*)(iter->ptr) == '\\');
-//        iter->ptr = (char*)(iter->ptr) - 1) {
-//   }
-//   // skip to separator
-//   for (; ((iter->ptr) >= iter->data) &&
-//          (*(char*)(iter->ptr) != '/' && *(char*)(iter->ptr) != '\\');
-//        iter->ptr = (char*)(iter->ptr) - 1) {
-//     out_component->size++;
-//   }
-
-//   if (iter->ptr < iter->data)
-//     return -1;
-
-//   out_component->data = (char*)iter->ptr + 1;
-//   return 0;
-// }
-
 int c_fs_path_metadata(CPath path, CFsMetadata* out_metadata)
 {
   c_fs_path_validate(path.data, path.size);
