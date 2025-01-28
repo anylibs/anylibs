@@ -13,6 +13,27 @@
     .data = (path), .size = strlen(path) \
   }
 
+UTEST(CPath, open_folder_as_file)
+{
+  CPath  path = CPATH(ANYLIBS_C_TEST_PLAYGROUND);
+  CFile* f    = c_fs_file_open(path, "r", 1);
+  EXPECT_FALSE(f);
+  EXPECT_EQ(0, c_fs_file_close(f));
+}
+
+UTEST(CPath, create_file)
+{
+  CPath  fpath = CPATH(ANYLIBS_C_TEST_PLAYGROUND "file");
+  CFile* f     = c_fs_file_open(fpath, "w", 1);
+  EXPECT_TRUE(f);
+  size_t fsize;
+  EXPECT_EQ(0, c_fs_file_size(f, &fsize));
+  EXPECT_EQ(0U, fsize);
+
+  EXPECT_EQ(0, c_fs_file_close(f));
+  EXPECT_EQ(0, c_fs_delete(fpath));
+}
+
 UTEST(CFsIter, iter)
 {
   enum { buf_size = 1024 };
@@ -29,7 +50,7 @@ UTEST(CFsIter, iter)
     size_t f_size = 0;
     if (c_fs_is_dir(c_fs_cpathref_to_cpath(result)) != 0) {
       CFile* f = c_fs_file_open(c_fs_cpathref_to_cpath(result), "r", 1);
-      EXPECT_TRUE(f);
+      ASSERT_TRUE(f);
       EXPECT_TRUE(c_fs_file_size(f, &f_size) == 0);
       break;
     }

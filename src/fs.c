@@ -53,7 +53,7 @@
 
 CFile* c_fs_file_open(CPath path, char const mode[], size_t mode_size)
 {
-  /// validation
+  // validation
   if (!(path.data) || (path.size) == 0) {
     c_error_set(C_ERROR_fs_invalid_path);
     return NULL;
@@ -98,6 +98,21 @@ CFile* c_fs_file_open(CPath path, char const mode[], size_t mode_size)
   FILE* f = fopen(path.data, mode);
   if (!f) {
     c_error_set(errno);
+    return NULL;
+  }
+
+  // on unix you could open directories as a file
+  // check and fail if the path is directory
+  int fno = fileno(f);
+  errno   = 0;
+  struct stat statbuf;
+  int         status = fstat(fno, &statbuf);
+  if (status != 0) {
+    c_error_set(errno);
+    return NULL;
+  }
+  if (S_ISDIR(statbuf.st_mode)) {
+    c_error_set(C_ERROR_fs_is_dir);
     return NULL;
   }
 #endif
@@ -504,10 +519,10 @@ int c_fs_is_dir(CPath dir_path)
   if (path_attributes != 0) {
     c_error_set((c_error_t)errno);
     return -1;
-  } else if (S_ISDIR(sb.st_mode) == 0) {
-    return 1; // not a directory
-  } else {
+  } else if (S_ISDIR(sb.st_mode)) {
     return 0;
+  } else {
+    return 1; // not a directory
   }
 #endif
 }
