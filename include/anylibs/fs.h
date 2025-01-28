@@ -36,33 +36,17 @@ struct CPath {
   char const* data;
   size_t      size;
 };
-static inline CPath c_fs_path_create(char const path[], size_t path_size)
-{
-  return (CPath){.data = path, .size = path_size};
-}
 
 struct CPathBuf {
   char*  data;
   size_t size;
   size_t capacity;
 };
-static inline CPathBuf c_fs_pathbuf_create(char pathbuf[], size_t pathbuf_size, size_t pathbuf_capacity)
-{
-  return (CPathBuf){.data = pathbuf, .size = pathbuf_size, .capacity = pathbuf_capacity};
-}
 
 struct CPathRef {
   char*  data;
   size_t size;
 };
-static inline CPath c_fs_cpathref_to_cpath(CPathRef path_ref)
-{
-  return c_fs_path_create(path_ref.data, path_ref.size);
-}
-static inline CPathRef c_fs_cpathbuf_to_cpathref(CPathBuf pathbuf)
-{
-  return (CPathRef){.data = pathbuf.data, .size = pathbuf.size};
-}
 
 typedef struct CFsIter {
   CPathBuf* pathbuf;
@@ -100,5 +84,22 @@ int    c_fs_delete_recursively(CPathBuf* path);
 int    c_fs_iter(CPathBuf* path, CFsIter* out_iter);
 int    c_fs_iter_next(CFsIter* iter, CPathRef* out_cur_path);
 int    c_fs_iter_close(CFsIter* iter);
+
+static inline CPath c_fs_path_create(char const path[], size_t path_size)
+{
+  return (CPath){.data = path, .size = path_size};
+}
+static inline CPathBuf c_fs_pathbuf_create(char pathbuf[], size_t pathbuf_size, size_t pathbuf_capacity)
+{
+  return (CPathBuf){.data = pathbuf, .size = pathbuf_size, .capacity = pathbuf_capacity};
+}
+static inline CPath c_fs_cpathref_to_cpath(CPathRef path_ref)
+{
+  return c_fs_path_create(path_ref.data, path_ref.size);
+}
+static inline CPathRef c_fs_cpathbuf_to_cpathref(CPathBuf pathbuf)
+{
+  return (CPathRef){.data = pathbuf.data, .size = pathbuf.size};
+}
 
 #endif // ANYLIBS_FS_H

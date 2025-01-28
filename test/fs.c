@@ -260,8 +260,12 @@ UTEST(CPath, parent)
   EXPECT_TRUE(c_fs_path_parent(&path) == 0);
   EXPECT_STRNEQ("C:\\", path.data, path.size);
 
-  path = CPATH("/folder1/folder2/file");
+  char*  gt[]    = {"/folder1/folder2/file", "/folder1/folder2", "/folder1"};
+  size_t counter = 0;
+  path           = CPATH("/folder1/folder2/file");
   do {
-    printf("%.*s\n", (int)path.size, path.data);
+    EXPECT_EQ(strlen(gt[counter]), path.size);
+    EXPECT_STRNEQ(gt[counter], path.data, path.size);
+    counter++;
   } while (c_fs_path_parent(&path) == 0);
 }
