@@ -52,15 +52,17 @@ else()
         -Wpedantic
         -Werror
         $<$<CONFIG:RELEASE>:-D_FORTIFY_SOURCE=2>
-        # $<$<CONFIG:DEBUG>:-fsanitize=${sanitizers}>
+        $<$<AND:$<CONFIG:DEBUG>,$<PLATFORM_ID:Linux>>:-fsanitize=${sanitizers}>
         $<$<CONFIG:DEBUG>:-fstack-protector-strong>
         $<$<CONFIG:DEBUG>:--param=ssp-buffer-size=4>
         $<$<CONFIG:DEBUG>:-fno-omit-frame-pointer>
         $<$<AND:$<CONFIG:DEBUG>,$<PLATFORM_ID:Linux>>:-fstack-clash-protection>
+        # $<$<AND:$<CONFIG:DEBUG>,$<C_COMPILER_ID:Clang>>:-fprofile-instr-generate>
+        # $<$<AND:$<CONFIG:DEBUG>,$<C_COMPILER_ID:Clang>>:-fcoverage-mapping>
     )
-    # add_link_options(
-    #     $<$<CONFIG:DEBUG>:-fsanitize=${sanitizers}>
-    # )
+    add_link_options(
+        $<$<AND:$<CONFIG:DEBUG>,$<PLATFORM_ID:Linux>>:-fsanitize=${sanitizers}>
+    )
 endif()
 
 if (ANYLIBS_ENABLE_TESTING)
