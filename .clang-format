@@ -1,19 +1,27 @@
 BasedOnStyle: LLVM
 
-BreakBeforeBraces: Linux
-PointerAlignment: Left
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: AcrossComments
+### single line
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortFunctionsOnASingleLine: None
-AlignTrailingComments: false
 AllowShortEnumsOnASingleLine: true
 AllowShortBlocksOnASingleLine: Always
 AllowShortCaseLabelsOnASingleLine: true
-IndentCaseLabels: true
+
+### alignment
+PointerAlignment: Left
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+
+AlignTrailingComments: false
 AlignConsecutiveShortCaseStatements:
   Enabled: true
   AcrossEmptyLines: true
   AcrossComments: true
   AlignCaseColons: false
+
+### others
+BreakBeforeBraces: Linux
+IndentCaseLabels: true
 ColumnLimit: 0

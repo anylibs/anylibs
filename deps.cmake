@@ -7,7 +7,6 @@ if(NOT EXISTS ${utest_path}/utest.h)
     file(DOWNLOAD https://raw.githubusercontent.com/sheredom/utest.h/master/utest.h ${utest_path}/utest.h)
     file(WRITE ${utest_path}/utest.c 
         "#include \"utest.h\"\n"
-        "UTEST_MAIN()\n"
     )
 endif()
 add_library(utest ${utest_path}/utest.h ${utest_path}/utest.c)

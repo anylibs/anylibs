@@ -41,14 +41,14 @@ char const* c_error_to_str(c_error_t code)
     case C_ERROR_dl_loader_invalid_symbol: return "dl_loader invalid symbol";
     default:                               {
 #ifdef _WIN32
-      static thread_local char buffer[1024];
-      DWORD                    msg_len = FormatMessage(FORMAT_MESSAGE_MAX_WIDTH_MASK | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                                       NULL, /* (not used with FORMAT_MESSAGE_FROM_SYSTEM) */
-                                                       code,
-                                                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                                       buffer,
-                                                       sizeof(buffer),
-                                                       NULL);
+      static __declspec(thread) char buffer[1024];
+      DWORD                          msg_len = FormatMessage(FORMAT_MESSAGE_MAX_WIDTH_MASK | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                                             NULL, /* (not used with FORMAT_MESSAGE_FROM_SYSTEM) */
+                                                             code,
+                                                             MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                                             buffer,
+                                                             sizeof(buffer),
+                                                             NULL);
 
       return msg_len ? buffer : "unkown error";
 #else
@@ -82,7 +82,6 @@ static void*          c_internal_error_user_data = NULL;
 
 void c_error_register_once(CErrorCallback callback, void* user_data)
 {
-
 #ifdef _WIN32
   bool old_state = InterlockedCompareExchange((volatile long*)&c_error_initiated, true, false);
   if (old_state) return;

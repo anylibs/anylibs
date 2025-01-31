@@ -1,9 +1,12 @@
 add_compile_definitions(ANYLIBS_C_TEST_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/")
 add_compile_definitions(ANYLIBS_C_TEST_PLAYGROUND="${CMAKE_CURRENT_BINARY_DIR}/")
 
+add_library(main_test main.c)
+target_link_libraries(main_test PUBLIC c::utest)
+
 macro (create_test name deps)
     add_executable(test_${name} ${name}.c)
-    target_link_libraries(test_${name} c::utest anylibs ${deps})
+    target_link_libraries(test_${name} main_test anylibs ${deps})
 endmacro()
 
 create_test(vec anylibs_src)
